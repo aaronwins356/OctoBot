@@ -1,16 +1,18 @@
 """Bootstrap OctoBot with an initial improvement cycle."""
 from __future__ import annotations
 
-from government.orchestrator import Orchestrator
+from octobot.core.orchestrator import Orchestrator
 
 
 def main() -> None:
     orchestrator = Orchestrator()
-    result = orchestrator.run_cycle()
-    print("Analyzer report at:", result.report_path)
-    for proposal in result.proposals:
-        print("Generated proposal:", proposal.proposal_id)
+    lifecycle = orchestrator.draft_proposal("Bootstrap Improvements")
+    print("Generated proposal:", lifecycle.proposal.proposal_id)
+    if lifecycle.validation:
+        print("Validation status:", "compliant" if lifecycle.validation.compliant else "issues detected")
+    if lifecycle.evaluation:
+        print("Evaluation complexity score:", lifecycle.evaluation.complexity)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover - script entrypoint
     main()

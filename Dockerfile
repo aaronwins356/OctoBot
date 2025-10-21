@@ -15,4 +15,4 @@ ENV APP_ENV=development \
     DB_PATH=memory/memory.db \
     AUTO_ANALYZE_INTERVAL=weekly
 
-CMD ["python", "-m", "interface.cli", "list-proposals"]
+CMD ["python", "-m", "octobot.interface.cli", "list-proposals"]

@@ -11,7 +11,9 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "click>=8.1",
-    "Flask>=3.0",
+    "fastapi>=0.110",
+    "jinja2>=3.1",
+    "uvicorn>=0.27",
     "pytest>=7.4",
     "pytest-cov>=4.1",
     "mypy>=1.8",
@@ -32,7 +34,7 @@ extend-ignore = ["E203", "W503"]
 
 [tool.coverage.run]
 branch = true
-source = ["connectors", "engineers", "government", "interface", "laws", "memory", "website"]
+source = ["octobot"]
 
 [tool.coverage.report]
 fail_under = 90

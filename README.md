@@ -15,16 +15,17 @@ projects without removing humans from the loop.
 
 ## Repository Layout
 ```
-government/           # Orchestration, proposal management, scoring, merging
-engineers/            # Specialized agents for analysis, code drafting, testing, and documentation
-laws/                 # Constitutional documents and validator enforcing compliance
-connectors/           # Interfaces to external systems (stubbed for offline demonstration)
-interface/            # Human-facing CLI and Flask dashboard
-memory/               # SQLite persistence, metrics, and logging utilities
+octobot/core/         # Orchestration, proposal management, scoring, merging
+octobot/agents/       # Engineer and entrepreneur agents for analysis and innovation
+octobot/laws/         # Constitutional documents and validators enforcing compliance
+octobot/connectors/   # Interfaces to external systems (Chat Unreal bridge, crawlers)
+octobot/interface/    # Human-facing CLI and FastAPI + HTMX dashboard
+octobot/memory/       # SQLite persistence, metrics, logging utilities, and ledger
+octobot/utils/        # Shared helper utilities
+octobot/tests/        # Automated regression tests
 proposals/            # Generated proposal packages awaiting review
 scripts/              # Helper scripts for bootstrapping and maintenance
 docs/                 # Architectural documentation and user guides
-tests/                # Automated regression tests
 ```
 
 ## Getting Started
@@ -34,16 +35,15 @@ tests/                # Automated regression tests
    source .venv/bin/activate
    pip install -r requirements.txt
    ```
-2. Initialize the database and generate example proposals:
+2. Initialize the database and generate an example proposal:
    ```bash
-   python -m interface.cli analyze
-   python -m interface.cli propose
+   python -m octobot.interface.cli propose "Architecture Review"
    ```
 3. Launch the dashboard to inspect proposals, laws, and history:
    ```bash
-   python -m interface.cli serve
+   python -m octobot.interface.cli dashboard
    ```
-4. Approve a proposal through the dashboard or CLI, then apply it with the updater.
+4. Approve a proposal through the dashboard or CLI (`python -m octobot.interface.cli approve <proposal_id>`). The orchestrator runs tests and applies the change after approval.
 
 ## Safety Principles
 - **No Unreviewed Execution:** `laws/constitution.yaml` forbids automatic merges without human approval.
