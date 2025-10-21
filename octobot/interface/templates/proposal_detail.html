@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="space-y-6">
+  <div class="flex items-center justify-between">
+    <h2 class="text-2xl font-semibold">Proposal {{ proposal.proposal_id }}</h2>
+    <a class="rounded bg-slate-700 px-3 py-1 text-sm" href="/proposals">Back</a>
+  </div>
+  <article class="space-y-4">
+    <h3 class="text-xl font-semibold">Business Case</h3>
+    <pre class="rounded bg-slate-800 p-4 text-sm">{{ impact | tojson(indent=2) }}</pre>
+  </article>
+  <article class="space-y-4">
+    <h3 class="text-xl font-semibold">Validator Report</h3>
+    <div class="rounded bg-slate-800 p-4 text-sm">
+      <p>Status: <strong>{{ 'Compliant' if validation.compliant else 'Requires Attention' }}</strong></p>
+      <p>Coverage: {{ '%.1f' % (validation.coverage * 100) }}%</p>
+      {% if validation.issues %}
+      <ul class="mt-2 list-disc space-y-1 pl-5 text-rose-300">
+        {% for issue in validation.issues %}
+        <li>{{ issue }}</li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="mt-2 text-emerald-300">No issues detected.</p>
+      {% endif %}
+    </div>
+  </article>
+  <article class="space-y-4">
+    <h3 class="text-xl font-semibold">Diff</h3>
+    <pre class="rounded bg-slate-800 p-4 overflow-x-auto text-xs">{{ diff }}</pre>
+  </article>
+</section>
+{% endblock %}

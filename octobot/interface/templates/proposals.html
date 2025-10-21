@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="space-y-4">
+  <h2 class="text-2xl font-semibold">Proposals</h2>
+  <div class="overflow-hidden rounded bg-slate-800">
+    <table class="min-w-full divide-y divide-slate-700">
+      <thead class="bg-slate-700 text-left text-sm uppercase tracking-wider text-slate-200">
+        <tr>
+          <th class="px-4 py-3">ID</th>
+          <th class="px-4 py-3">Topic</th>
+          <th class="px-4 py-3">Status</th>
+          <th class="px-4 py-3">Coverage</th>
+          <th class="px-4 py-3">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-700 text-sm">
+        {% for proposal in proposals %}
+        <tr class="hover:bg-slate-700/40">
+          <td class="px-4 py-3 font-mono text-xs">{{ proposal.proposal_id }}</td>
+          <td class="px-4 py-3">{{ proposal.topic }}</td>
+          <td class="px-4 py-3">{{ proposal.status }}</td>
+          <td class="px-4 py-3">{{ '%.1f' % proposal.coverage }}</td>
+          <td class="px-4 py-3 space-x-2">
+            <a class="rounded bg-indigo-500 px-3 py-1 text-xs" href="/proposal/{{ proposal.proposal_id }}">Inspect</a>
+            <button
+              hx-post="/approve/{{ proposal.proposal_id }}"
+              hx-target="#proposal-alert"
+              hx-swap="innerHTML"
+              class="rounded bg-emerald-500 px-3 py-1 text-xs"
+            >Approve</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div id="proposal-alert" class="text-sm text-emerald-300"></div>
+</section>
+{% endblock %}
