@@ -1,10 +1,7 @@
-Flask>=2.3
-Click>=8.1
-PyYAML>=6.0
-GitPython>=3.1
-rich>=13.0
-pytest>=7.0
-requests>=2.31
-beautifulsoup4>=4.12
-feedparser>=6.0
-python-dotenv>=1.0
+click>=8.1
+Flask>=3.0
+pytest>=7.4
+pytest-cov>=4.1
+mypy>=1.8
+flake8>=6.1
+rich>=13.7

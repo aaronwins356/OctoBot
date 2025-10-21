@@ -1,81 +1,53 @@
 # OctoBot Architectural Overview
 
-OctoBot orchestrates self-inspection cycles consisting of analysis, proposal generation, evaluation, human review, and
-curated merging. This document outlines the participating subsystems and the flow of data between them.
+OctoBot is a governed self-analysis platform that inspects the repository, proposes improvements, and stages them for human review. The system is composed of several cooperating packages, each with clear responsibilities and defensive boundaries.
 
-## 1. Government Layer
+## Package Layout
 
-The government package coordinates the lifecycle of improvement initiatives.
+- `government/` — Owns lifecycle orchestration and application of proposals.
+- `engineers/` — Provides analysis capabilities and authoring support.
+- `connectors/` — Houses controlled bridges to internal services such as Chat Unreal.
+- `laws/` — Defines constitutional rules and exposes the enforcement API.
+- `memory/` — Supplies persistent storage, logging, and reporting utilities.
+- `interface/` & `website/` — Deliver the CLI and dashboard for human operators.
+- `entrepreneurs/` — Reserved for future venture generation tooling.
 
-- **orchestrator.py** — Schedules and executes improvement cycles. It invokes the analyzer, proposal manager, evaluator, and
-  reporter to assemble contextual data for human review.
-- **proposal_manager.py** — Persists proposals on disk in YAML + Markdown bundles. Each proposal is timestamped and backed by
-  rationale metadata.
-- **evaluator.py** — Scores proposals according to cyclomatic complexity impact, test coverage delta, documentation coverage,
-  and qualitative risk factors.
-- **compiler.py** — Consolidates evaluated proposals into dashboard-friendly payloads and exported reports.
-- **updater.py** — Applies approved proposals by invoking GitPython. The updater refuses to run unless an approval record is
-  present in the database.
+All directories contain `__init__.py` files to ensure deterministic module discovery and to encourage explicit relative imports within package internals.
 
-## 2. Engineering Agents
+## Lifecycle Flow
 
-The engineers package contains specialized workers focused on different aspects of the repository.
+1. **Analyze** — `engineers.analyzer_agent.AnalyzerAgent` scans the repository, collecting complexity metrics, TODO markers, and documentation gaps. Results are stored under `proposals/_workspace/` to comply with safety rules.
+2. **Propose** — `government.proposal_manager.ProposalManager` packages a proposal bundle (`proposal.yaml`, `rationale.md`, `diff.patch`, `impact.json`, and `tests/`). Metadata is synchronised with the SQLite store.
+3. **Evaluate** — `government.orchestrator.Orchestrator` checks metrics such as coverage to determine whether a proposal can be marked “ready for review”.
+4. **Present** — Proposals transition to the `awaiting_approval` state and surface in the CLI and dashboard.
+5. **Await Approval** — Humans review artefacts, optionally approving proposals through the CLI or dashboard.
+6. **Apply** — Once approved, `government.updater.Updater` enforces the merge rule, applies the staged patch, commits, and tags the repository.
 
-- **analyzer_agent.py** — Walks the repository, constructs ASTs for Python files, and surfaces hotspots such as repeated logic,
-  high-complexity functions, missing docstrings, and unused imports. Results are saved as JSON.
-- **code_writer_agent.py** — Builds rewrite candidates from analyzer findings. For offline operation it emits deterministic
-  suggestions seeded by heuristics and stores them under `proposals/<date_topic>/code/`.
-- **tester_agent.py** — Runs the project's test suites and captures success/failure metrics for use by the evaluator.
-- **documentor_agent.py** — Generates and maintains Markdown summaries of proposals and code modules.
+Each transition is logged with a Git SHA, timestamp, and status in `memory/system.log`.
 
-## 3. Governance and Ethics
+## Safety Enforcement
 
-The `laws/` directory contains YAML manifest files describing OctoBot's constitutional rules and ethical principles.
-`validator.py` ensures that every agent invocation respects these laws, preventing network access, unapproved merges, and
-missing rationales.
+`laws/validator.py` exposes a single `enforce(rule_name, context)` function that every agent calls before writing files, touching external services, or applying code. Violations raise `RuleViolationError` and are logged to `memory/audit.log`. The default constitution contains:
 
-## 4. Connectors
+- `external_request` — Only allow connectors to talk to external systems.
+- `filesystem_write` — Restrict writes to `/proposals` or `/ventures`.
+- `code_merge` — Require an explicit approval flag before applying changes.
 
-External communication is isolated to the `connectors/` package.
+## Storage & Logging
 
-- **unreal_bridge.py** — A controlled outbound interface that simulates network calls while enforcing restrictions.
-- **web_crawler.py** — Example connector that would consume the bridge to gather documentation in an auditable manner.
+`memory/history_logger.MemoryStore` manages the SQLite database (`memory/memory.db`) with tables for history events, proposals, errors, and metrics. `memory/logger.log_event` emits JSON entries with the schema `{"time", "agent", "action", "status", "details"}` and rotates automatically. The weekly summary exposed on the dashboard originates from `memory/reporter.Reporter`.
 
-## 5. Interfaces
+## Interfaces
 
-OctoBot exposes two primary human-facing surfaces:
+- **CLI** (`interface/cli.py`) — Provides commands (`octobot propose`, `evaluate`, `list-proposals`, `show`, `approve`, `apply`, `dashboard`). All commands rely on the orchestrator and proposal manager while respecting safety rules.
+- **Dashboard** (`website/app.py`) — Flask + Tailwind UI with tabs for System Health, Proposals, Ventures, Logs, and Laws. Approvals propagate through `ProposalManager` and can trigger `Updater.apply()` if conditions are satisfied.
 
-- **interface/cli.py** — A Click-based command line entry point providing commands to analyze, propose, evaluate, launch the
-  dashboard, approve proposals, and inspect logs.
-- **interface/dashboard.py** — A Flask application with pages for the system overview, proposals, history, and laws.
+## Connectors
 
-## 6. Memory Layer
+`connectors/unreal_bridge.py` supplies a resilient queue with exponential back-off. It performs health checks against the embedded Chat Unreal assets and serialises errors with detailed context. All network-esque actions go through this bridge, satisfying the `external_request` rule.
 
-The `memory/` package manages persistence using SQLite.
+## Future Extensions
 
-- **memory.db** — Created automatically on first use.
-- **reporter.py** — Aggregates metrics from analyzer runs and evaluator scores for dashboard display.
-- **history_logger.py** — Provides a typed interface for inserting and querying historical events and approvals.
-
-## 7. Data Flow Summary
-
-1. `orchestrator.run_cycle()` triggers the analyzer to produce a repository report.
-2. `proposal_manager.generate()` converts the report into structured proposals saved on disk.
-3. `evaluator.score()` grades each proposal, storing metrics via the reporter.
-4. Humans inspect results through the dashboard or CLI.
-5. Upon approval, `updater.merge()` validates the laws and commits changes using GitPython.
-
-## 8. Testing Strategy
-
-Automated tests cover:
-
-- Analyzer correctness for detecting missing docstrings and unused imports.
-- Proposal formatting to guarantee YAML schema compliance.
-- Dashboard health checks ensuring Flask routes render successfully.
-- Validator enforcement confirming that laws are parsed and applied to agent actions.
-
-## 9. Extending OctoBot
-
-Developers can add new agents or connectors by registering them with the validator and updating the CLI. Additional metrics can
-be logged by extending `memory/reporter.py` with new aggregation routines.
-
+- Populate `entrepreneurs/` with venture generators.
+- Integrate summarisation agents for proposal rationales.
+- Add notification plugins (e.g., Slack) on top of the existing governance pipeline.

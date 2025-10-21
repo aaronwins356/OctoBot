@@ -1,4 +1,4 @@
 rules:
-  - "No code execution or deployment without human approval."
-  - "No network requests outside connectors/unreal_bridge.py."
-  - "All generated proposals must log a rationale."
+  external_request: "No external requests except via connectors/unreal_bridge.py."
+  filesystem_write: "No file writes outside /proposals or /ventures."
+  code_merge: "No code merge without human approval flag."

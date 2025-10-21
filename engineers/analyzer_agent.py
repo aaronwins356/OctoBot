@@ -1,16 +1,16 @@
-"""AST-based repository analyzer for OctoBot."""
+"""Repository scanning agent."""
 from __future__ import annotations
 
 import ast
 import json
-from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List
 
-from laws.validator import DEFAULT_VALIDATOR
-from memory.history_logger import HistoryLogger
+from laws.validator import enforce
+from memory.logger import log_event
 from memory.reporter import AnalyzerSummary, Reporter
+from memory.utils import proposals_root, timestamp
 
 
 @dataclass
@@ -21,81 +21,94 @@ class AnalyzerFinding:
 
 
 class AnalyzerAgent:
-    def __init__(self, repo_root: Path | None = None, reporter: Reporter | None = None, logger: HistoryLogger | None = None) -> None:
+    """Perform static analysis over the repository tree."""
+
+    def __init__(self, repo_root: Path | None = None, reporter: Reporter | None = None) -> None:
         self.repo_root = repo_root or Path.cwd()
         self.reporter = reporter or Reporter()
-        self.logger = logger or HistoryLogger()
 
-    def scan_repo(self) -> Dict[str, List[Dict[str, str]]]:
-        DEFAULT_VALIDATOR.ensure(["human approval", "rationale logged"])
+    def scan_repo(self) -> Dict[str, object]:
+        """Return a structured analysis of the repository."""
+        enforce("filesystem_write", str(proposals_root()))
         python_files = list(self._iter_python_files())
         findings: List[AnalyzerFinding] = []
-        unused_imports = 0
+        todos = 0
         missing_docstrings = 0
+        total_complexity = 0
         for path in python_files:
-            module = path.read_text(encoding="utf-8")
-            tree = ast.parse(module, filename=str(path))
-            findings.extend(self._analyze_module(path, tree))
-            unused_imports += self._count_unused_imports(tree)
-            missing_docstrings += self._count_missing_docstrings(tree)
-        findings_dicts = [finding.__dict__ for finding in findings]
-        self.reporter.record_analyzer_summary(
-            AnalyzerSummary(
-                files_scanned=len(python_files),
-                functions_flagged=sum(1 for f in findings if f.issue_type == "complexity"),
-                unused_imports=unused_imports,
-                missing_docstrings=missing_docstrings,
-            )
+            source = path.read_text(encoding="utf-8")
+            todos += source.count("TODO")
+            tree = ast.parse(source, filename=str(path))
+            file_findings, file_missing, file_complexity = self._analyse_module(path, tree)
+            findings.extend(file_findings)
+            missing_docstrings += file_missing
+            total_complexity += file_complexity
+        complexity_average = total_complexity / max(len(python_files), 1)
+        coverage_estimate = self._estimate_coverage()
+        summary = AnalyzerSummary(
+            files_scanned=len(python_files),
+            complexity_issues=sum(1 for finding in findings if finding.issue_type == "complexity"),
+            todos=todos,
+            missing_docstrings=missing_docstrings,
+            coverage=coverage_estimate,
         )
+        self.reporter.record_analyzer_summary(summary)
         report = {
-            "findings": findings_dicts,
-            "files_scanned": len(python_files),
-            "unused_imports": unused_imports,
+            "generated_at": timestamp(),
+            "files": len(python_files),
+            "complexity_average": complexity_average,
+            "todos": todos,
             "missing_docstrings": missing_docstrings,
+            "coverage": coverage_estimate,
+            "findings": [finding.__dict__ for finding in findings],
         }
-        self.logger.log_event(
-            f"Analyzer scanned {len(python_files)} files and recorded {len(findings_dicts)} findings"
+        log_event(
+            "analyzer",
+            "scan_repo",
+            "completed",
+            {"files": len(python_files), "findings": len(findings)},
         )
-        (self.repo_root / "reports").mkdir(exist_ok=True)
-        report_path = self.repo_root / "reports" / "analyzer_report.json"
+        workspace = proposals_root() / "_workspace"
+        report_path = workspace / "analyzer_report.json"
+        enforce("filesystem_write", str(report_path))
+        workspace.mkdir(parents=True, exist_ok=True)
         report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
         return report
 
     def _iter_python_files(self) -> Iterable[Path]:
         for path in self.repo_root.rglob("*.py"):
-            if any(part.startswith(".") for part in path.parts):
-                continue
-            if "__pycache__" in path.parts or path.parts[0] == "venv":
+            if "__pycache__" in path.parts or path.parts[0] in {"venv", ".git"}:
                 continue
             yield path
 
-    def _analyze_module(self, path: Path, tree: ast.AST) -> List[AnalyzerFinding]:
+    def _analyse_module(self, path: Path, tree: ast.AST) -> tuple[List[AnalyzerFinding], int, int]:
         findings: List[AnalyzerFinding] = []
+        missing_docstrings = 0
+        complexity_total = 0
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if ast.get_docstring(node) is None:
+                    missing_docstrings += 1
                 complexity = self._cyclomatic_complexity(node)
+                complexity_total += complexity
                 if complexity > 10:
                     findings.append(
                         AnalyzerFinding(
                             file_path=str(path.relative_to(self.repo_root)),
                             issue_type="complexity",
-                            detail=f"Function {node.name} has cyclomatic complexity {complexity}",
+                            detail=f"Function {node.name} complexity {complexity}",
                         )
                     )
-        duplicate_counts = Counter()
         for node in ast.walk(tree):
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
-                duplicate_counts[node.func.id] += 1
-        for name, count in duplicate_counts.items():
-            if count > 5:
+            if isinstance(node, ast.Constant) and isinstance(node.value, str) and "TODO" in node.value:
                 findings.append(
                     AnalyzerFinding(
                         file_path=str(path.relative_to(self.repo_root)),
-                        issue_type="repetition",
-                        detail=f"Function name {name} appears {count} times",
+                        issue_type="todo",
+                        detail=node.value.strip(),
                     )
                 )
-        return findings
+        return findings, missing_docstrings, complexity_total
 
     def _cyclomatic_complexity(self, node: ast.AST) -> int:
         complexity = 1
@@ -104,24 +117,12 @@ class AnalyzerAgent:
                 complexity += 1
         return complexity
 
-    def _count_unused_imports(self, tree: ast.AST) -> int:
-        imported_names = set()
-        used_names = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                for alias in node.names:
-                    imported_names.add(alias.asname or alias.name.split(".")[0])
-            elif isinstance(node, ast.ImportFrom):
-                for alias in node.names:
-                    imported_names.add(alias.asname or alias.name)
-            elif isinstance(node, ast.Name):
-                used_names.add(node.id)
-        return len(imported_names - used_names)
-
-    def _count_missing_docstrings(self, tree: ast.AST) -> int:
-        count = 0
-        for node in tree.body if isinstance(tree, ast.Module) else []:
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-                if ast.get_docstring(node) is None:
-                    count += 1
-        return count
+    def _estimate_coverage(self) -> float:
+        coverage_file = proposals_root() / "_workspace" / "coverage.json"
+        if coverage_file.exists():
+            try:
+                data = json.loads(coverage_file.read_text(encoding="utf-8"))
+                return float(data.get("coverage", 0.0))
+            except (ValueError, TypeError):
+                return 0.0
+        return 0.0

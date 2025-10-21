@@ -1,52 +1,54 @@
-"""Aggregated metrics for OctoBot."""
+"""Analytics and reporting utilities for OctoBot."""
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Dict, List
 
-from memory.history_logger import HistoryLogger, MetricRecord, MetricStore
+from .history_logger import MemoryStore, ProposalRecord
+from .logger import log_event
 
 
 @dataclass
 class AnalyzerSummary:
     files_scanned: int
-    functions_flagged: int
-    unused_imports: int
+    complexity_issues: int
+    todos: int
     missing_docstrings: int
+    coverage: float
 
 
 class Reporter:
-    def __init__(self, metric_store: MetricStore | None = None, logger: HistoryLogger | None = None) -> None:
-        self.metric_store = metric_store or MetricStore()
-        self.logger = logger or HistoryLogger()
+    """Capture metrics and provide dashboard-ready aggregates."""
+
+    def __init__(self, store: MemoryStore | None = None) -> None:
+        self.store = store or MemoryStore()
 
     def record_analyzer_summary(self, summary: AnalyzerSummary) -> None:
-        self.metric_store.log_metric("files_scanned", summary.files_scanned)
-        self.metric_store.log_metric("functions_flagged", summary.functions_flagged)
-        self.metric_store.log_metric("unused_imports", summary.unused_imports)
-        self.metric_store.log_metric("missing_docstrings", summary.missing_docstrings)
-        self.logger.log_event(
-            "Analyzer summary recorded: "
-            + ", ".join(
-                f"{field}={getattr(summary, field)}"
-                for field in ("files_scanned", "functions_flagged", "unused_imports", "missing_docstrings")
-            )
+        self.store.log_metric("files_scanned", float(summary.files_scanned))
+        self.store.log_metric("complexity_issues", float(summary.complexity_issues))
+        self.store.log_metric("todos", float(summary.todos))
+        self.store.log_metric("missing_docstrings", float(summary.missing_docstrings))
+        self.store.log_metric("coverage", summary.coverage)
+        log_event(
+            "reporter",
+            "analyzer_summary",
+            "recorded",
+            {
+                "files_scanned": summary.files_scanned,
+                "complexity_issues": summary.complexity_issues,
+                "todos": summary.todos,
+                "missing_docstrings": summary.missing_docstrings,
+                "coverage": summary.coverage,
+            },
         )
 
-    def record_evaluator_scores(self, scores: Dict[str, float]) -> None:
-        for key, value in scores.items():
-            self.metric_store.log_metric(f"score_{key}", value)
-        self.logger.log_event("Evaluator scores recorded: " + ", ".join(f"{k}={v}" for k, v in scores.items()))
+    def latest_metrics(self) -> Dict[str, List[Dict[str, str]]]:
+        keys = ["files_scanned", "complexity_issues", "todos", "missing_docstrings", "coverage"]
+        return {key: self.store.fetch_metrics(key) for key in keys}
 
-    def latest_metrics(self) -> Dict[str, List[MetricRecord]]:
-        keys = [
-            "files_scanned",
-            "functions_flagged",
-            "unused_imports",
-            "missing_docstrings",
-            "score_complexity",
-            "score_tests",
-            "score_docs",
-            "score_risk",
-        ]
-        return {key: self.metric_store.fetch_metrics(key) for key in keys}
+    def generate_weekly_summary(self) -> Dict[str, Dict[str, int]]:
+        proposal_summary = self.store.proposals_summary_last_week()
+        return {"proposals": proposal_summary}
+
+    def proposals(self) -> List[ProposalRecord]:
+        return self.store.list_proposals()

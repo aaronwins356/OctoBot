@@ -1,100 +1,180 @@
 """Proposal management for OctoBot."""
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
 
-from utils_yaml import safe_dump, safe_load
-
-from engineers.code_writer_agent import CodeWriterAgent
-from engineers.documentor_agent import DocumentorAgent
-from laws.validator import DEFAULT_VALIDATOR
-from memory.history_logger import HistoryLogger
+from laws.validator import enforce
+from memory.history_logger import MemoryStore, ProposalRecord
+from memory.logger import log_event
+from memory.utils import dump_yaml, load_yaml, proposals_root, timestamp
 
 
 @dataclass
 class Proposal:
     proposal_id: str
-    impact: str
-    risk: str
-    summary: str
-    rationale: str
+    topic: str
+    status: str
     path: Path
+    summary: str
+    coverage: float
 
 
 class ProposalManager:
-    def __init__(
-        self,
-        repo_root: Path | None = None,
-        code_writer: CodeWriterAgent | None = None,
-        documentor: DocumentorAgent | None = None,
-        logger: HistoryLogger | None = None,
-    ) -> None:
-        self.repo_root = repo_root or Path.cwd()
-        self.code_writer = code_writer or CodeWriterAgent(self.repo_root)
-        self.documentor = documentor or DocumentorAgent(self.repo_root)
-        self.logger = logger or HistoryLogger()
+    """Create and retrieve proposals."""
 
-    def generate(self, analyzer_report: Dict[str, List[Dict[str, str]]]) -> List[Proposal]:
-        DEFAULT_VALIDATOR.ensure(["human approval", "rationale logged"])
-        proposal_dir = self.code_writer.create_rewrite_candidates(analyzer_report)
-        impact = "high" if analyzer_report.get("findings") else "medium"
-        proposal_id = proposal_dir.name
-        yaml_data = {
+    def __init__(self, store: MemoryStore | None = None) -> None:
+        self.store = store or MemoryStore()
+
+    def generate(self, topic: str, analysis: Dict[str, object]) -> Proposal:
+        proposal_id = self._make_identifier(topic)
+        proposal_dir = proposals_root() / proposal_id
+        enforce("filesystem_write", str(proposal_dir))
+        proposal_dir.mkdir(parents=True, exist_ok=True)
+        summary_text = f"Improve {topic} to address {len(analysis.get('findings', []))} findings."
+        metadata = {
             "id": proposal_id,
-            "impact": impact,
-            "risk": "low",
-            "summary": "Automated refactor suggestions based on analyzer findings",
-            "rationale": "Analyzer detected opportunities to simplify logic and improve documentation.",
+            "topic": topic,
+            "status": "draft",
+            "created_at": timestamp(),
+            "summary": summary_text,
+            "coverage": analysis.get("coverage", 0.0),
         }
-        proposal_yaml = proposal_dir / "proposal.yaml"
-        proposal_yaml.write_text(safe_dump(yaml_data, sort_keys=False), encoding="utf-8")
-        self.documentor.write_summary(
-            proposal_dir,
-            {
-                "topic": "Refactor import structure" if analyzer_report.get("unused_imports") else "Documentation improvements",
-                "impact": yaml_data["impact"],
-                "risk": yaml_data["risk"],
-                "rationale": yaml_data["rationale"],
-            },
+        metadata_path = proposal_dir / "proposal.yaml"
+        enforce("filesystem_write", str(metadata_path))
+        dump_yaml(metadata, metadata_path)
+        tests_dir = proposal_dir / "tests"
+        enforce("filesystem_write", str(tests_dir))
+        tests_dir.mkdir(exist_ok=True)
+        rationale_path = proposal_dir / "rationale.md"
+        enforce("filesystem_write", str(rationale_path))
+        rationale_path.write_text(
+            self._compose_rationale(topic, analysis),
+            encoding="utf-8",
         )
-        self.logger.log_event(f"Proposal {proposal_id} generated")
-        return [
-            Proposal(
-                proposal_id=yaml_data["id"],
-                impact=yaml_data["impact"],
-                risk=yaml_data["risk"],
-                summary=yaml_data["summary"],
-                rationale=yaml_data["rationale"],
-                path=proposal_dir,
+        diff_path = proposal_dir / "diff.patch"
+        enforce("filesystem_write", str(diff_path))
+        diff_path.write_text(self._compose_patch_stub(proposal_id, topic), encoding="utf-8")
+        impact_path = proposal_dir / "impact.json"
+        enforce("filesystem_write", str(impact_path))
+        impact_path.write_text(
+            json.dumps(self._compose_impact(metadata, analysis), indent=2),
+            encoding="utf-8",
+        )
+        self.store.upsert_proposal(
+            ProposalRecord(
+                proposal_id=proposal_id,
+                topic=topic,
+                status="draft",
+                created_at=metadata["created_at"],
+                path=str(proposal_dir),
+                approval_date=None,
             )
-        ]
+        )
+        log_event("proposals", "generate", "draft", metadata)
+        return Proposal(
+            proposal_id=proposal_id,
+            topic=topic,
+            status="draft",
+            path=proposal_dir,
+            summary=summary_text,
+            coverage=float(metadata["coverage"]),
+        )
 
     def list_proposals(self) -> List[Proposal]:
-        proposals_root = self.repo_root / "proposals"
+        records = self.store.list_proposals()
         proposals: List[Proposal] = []
-        if not proposals_root.exists():
-            return proposals
-        for path in proposals_root.iterdir():
+        for record in records:
+            path = Path(record.path)
             yaml_path = path / "proposal.yaml"
-            if yaml_path.exists():
-                data = safe_load(yaml_path.read_text(encoding="utf-8"))
-                proposals.append(
-                    Proposal(
-                        proposal_id=data["id"],
-                        impact=data.get("impact", "medium"),
-                        risk=data.get("risk", "medium"),
-                        summary=data.get("summary", ""),
-                        rationale=data.get("rationale", ""),
-                        path=path,
-                    )
+            if not yaml_path.exists():
+                continue
+            data = load_yaml(yaml_path)
+            data.setdefault("status", record.status)
+            proposals.append(
+                Proposal(
+                    proposal_id=data["id"],
+                    topic=data["topic"],
+                    status=str(data.get("status", record.status)),
+                    path=path,
+                    summary=data.get("summary", ""),
+                    coverage=float(data.get("coverage", 0.0)),
                 )
-        proposals.sort(key=lambda p: p.proposal_id, reverse=True)
+            )
         return proposals
 
-    def load_proposal(self, proposal_id: str) -> Proposal | None:
+    def load(self, proposal_id: str) -> Proposal | None:
         for proposal in self.list_proposals():
             if proposal.proposal_id == proposal_id:
                 return proposal
         return None
+
+    def mark_ready_for_review(self, proposal_id: str, coverage: float) -> None:
+        if coverage < 90.0:
+            raise ValueError("Test coverage must be at least 90% before review")
+        self.store.update_proposal_status(proposal_id, "ready", None)
+        self._update_metadata(proposal_id, {"status": "ready", "coverage": coverage})
+        log_event("proposals", "ready", "queued", {"proposal": proposal_id, "coverage": coverage})
+
+    def mark_presented(self, proposal_id: str) -> None:
+        self.store.update_proposal_status(proposal_id, "awaiting_approval", None)
+        self._update_metadata(proposal_id, {"status": "awaiting_approval"})
+
+    def approve(self, proposal_id: str, approver: str) -> None:
+        approval_time = timestamp()
+        self.store.update_proposal_status(proposal_id, "approved", approval_time)
+        self._update_metadata(proposal_id, {"status": "approved", "approval_date": approval_time})
+        log_event("governance", "approve", "approved", {"proposal": proposal_id, "approver": approver})
+
+    def _make_identifier(self, topic: str) -> str:
+        today = datetime.utcnow().strftime("%Y-%m-%d")
+        safe_topic = "_".join(part for part in topic.lower().split() if part)
+        return f"{today}_{safe_topic}" if safe_topic else f"{today}_proposal"
+
+    def _compose_rationale(self, topic: str, analysis: Dict[str, object]) -> str:
+        lines = [
+            f"# Rationale for {topic}",
+            "",
+            "## Context",
+            f"- Findings analysed: {len(analysis.get('findings', []))}",
+            f"- Average complexity: {analysis.get('complexity_average', 0):.2f}",
+            f"- TODO markers: {analysis.get('todos', 0)}",
+            "",
+            "## Proposed Approach",
+            "The system will refactor modules to reduce complexity and improve documentation.",
+            "All changes are staged within the proposals workspace for human review.",
+        ]
+        return "\n".join(lines)
+
+    def _compose_patch_stub(self, proposal_id: str, topic: str) -> str:
+        return (
+            "--- /dev/null\n"
+            f"+++ b/proposals/{proposal_id}/NOTES.md\n"
+            "@@\n"
+            f"+# Proposed improvements for {topic}\n"
+            "+This placeholder file summarises intended changes.\n"
+        )
+
+    def _compose_impact(self, metadata: Dict[str, object], analysis: Dict[str, object]) -> Dict[str, object]:
+        return {
+            "proposal_id": metadata["id"],
+            "expected_coverage": analysis.get("coverage", 0.0),
+            "risk": "low" if analysis.get("complexity_average", 0) < 10 else "medium",
+            "benefits": {
+                "complexity_reduction": max(0, len(analysis.get("findings", []))),
+                "documentation_improvement": analysis.get("missing_docstrings", 0),
+            },
+        }
+
+    def _update_metadata(self, proposal_id: str, updates: Dict[str, object]) -> None:
+        proposal = self.load(proposal_id)
+        if not proposal:
+            return
+        metadata_path = proposal.path / "proposal.yaml"
+        enforce("filesystem_write", str(metadata_path))
+        data = load_yaml(metadata_path)
+        data.update(updates)
+        dump_yaml(data, metadata_path)

@@ -1,21 +1,20 @@
-"""Testing automation for OctoBot."""
+"""Wrapper around pytest execution."""
 from __future__ import annotations
 
 import subprocess
 from pathlib import Path
 from typing import Dict
 
-from laws.validator import DEFAULT_VALIDATOR
-from memory.history_logger import HistoryLogger
+from laws.validator import enforce
+from memory.logger import log_event
 
 
 class TesterAgent:
-    def __init__(self, repo_root: Path | None = None, logger: HistoryLogger | None = None) -> None:
+    def __init__(self, repo_root: Path | None = None) -> None:
         self.repo_root = repo_root or Path.cwd()
-        self.logger = logger or HistoryLogger()
 
     def run_tests(self) -> Dict[str, str | int]:
-        DEFAULT_VALIDATOR.ensure(["human approval", "rationale logged"])
+        enforce("filesystem_write", str(self.repo_root / "proposals"))
         try:
             completed = subprocess.run(
                 ["pytest", "-q"],
@@ -25,15 +24,15 @@ class TesterAgent:
                 text=True,
                 check=False,
             )
-            success = completed.returncode == 0
-            self.logger.log_event("Tester agent executed pytest with success=%s" % success)
+            status = "passed" if completed.returncode == 0 else "failed"
+            log_event("tester", "pytest", status, completed.stdout)
             return {
-                "status": "passed" if success else "failed",
+                "status": status,
                 "output": completed.stdout,
                 "returncode": completed.returncode,
             }
         except FileNotFoundError:
-            self.logger.log_event("Pytest not available; returning skipped status")
+            log_event("tester", "pytest", "skipped", "pytest not installed")
             return {
                 "status": "skipped",
                 "output": "pytest not installed",
