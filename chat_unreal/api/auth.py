@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hmac
-import os
 from typing import Optional
 
 from .. import config
@@ -22,7 +21,5 @@ def require_token() -> str:
 
     token = config.get_env_variable("OCTOBOT_KEY")
     if not token:
-        raise RuntimeError(
-            "OCTOBOT_KEY environment variable must be set for authentication"
-        )
+        raise RuntimeError("OCTOBOT_KEY environment variable must be set for authentication")
     return token

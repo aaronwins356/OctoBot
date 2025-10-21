@@ -1,4 +1,5 @@
 """FastAPI dashboard exposing proposal lifecycle data."""
+
 from __future__ import annotations
 
 import json
@@ -36,12 +37,16 @@ def create_app() -> FastAPI:
         )
 
     @app.get("/proposal/{proposal_id}", response_class=HTMLResponse)
-    async def proposal_detail(request: Request, proposal_id: str) -> HTMLResponse:
+    async def proposal_detail(
+        request: Request, proposal_id: str
+    ) -> HTMLResponse | RedirectResponse:
         proposal = manager.load(proposal_id)
         if not proposal:
             return RedirectResponse(url="/proposals", status_code=302)
         diff_path = proposal.path / "diff.patch"
-        diff_text = diff_path.read_text(encoding="utf-8") if diff_path.exists() else "Diff not available."
+        diff_text = (
+            diff_path.read_text(encoding="utf-8") if diff_path.exists() else "Diff not available."
+        )
         impact_path = proposal.path / "impact.json"
         impact = json.loads(impact_path.read_text(encoding="utf-8")) if impact_path.exists() else {}
         validation = validate_proposal(proposal)

@@ -1,4 +1,5 @@
 """Database-backed storage for OctoBot state."""
+
 from __future__ import annotations
 
 import sqlite3
@@ -135,7 +136,9 @@ class MemoryStore:
             )
             conn.commit()
 
-    def update_proposal_status(self, proposal_id: str, status: str, approval_date: Optional[str] = None) -> None:
+    def update_proposal_status(
+        self, proposal_id: str, status: str, approval_date: Optional[str] = None
+    ) -> None:
         with _connect() as conn:
             conn.execute(
                 "UPDATE proposals SET status = ?, approval_date = ? WHERE id = ?",
@@ -146,7 +149,10 @@ class MemoryStore:
     def fetch_proposal(self, proposal_id: str) -> Optional[ProposalRecord]:
         with _connect() as conn:
             cursor = conn.execute(
-                "SELECT id as proposal_id, topic, status, created_at, path, approval_date FROM proposals WHERE id = ?",
+                (
+                    "SELECT id as proposal_id, topic, status, created_at, path, approval_date "
+                    "FROM proposals WHERE id = ?"
+                ),
                 (proposal_id,),
             )
             row = cursor.fetchone()
@@ -155,7 +161,10 @@ class MemoryStore:
     def list_proposals(self) -> List[ProposalRecord]:
         with _connect() as conn:
             cursor = conn.execute(
-                "SELECT id as proposal_id, topic, status, created_at, path, approval_date FROM proposals ORDER BY created_at DESC",
+                (
+                    "SELECT id as proposal_id, topic, status, created_at, path, approval_date "
+                    "FROM proposals ORDER BY created_at DESC"
+                ),
             )
             return [ProposalRecord(**dict(row)) for row in cursor.fetchall()]
 
@@ -178,7 +187,10 @@ class MemoryStore:
     def fetch_metrics(self, key: str, limit: int = 20) -> List[Dict[str, str]]:
         with _connect() as conn:
             cursor = conn.execute(
-                "SELECT key, value, captured_at FROM metrics WHERE key = ? ORDER BY captured_at DESC LIMIT ?",
+                (
+                    "SELECT key, value, captured_at FROM metrics "
+                    "WHERE key = ? ORDER BY captured_at DESC LIMIT ?"
+                ),
                 (key, limit),
             )
             return [dict(row) for row in cursor.fetchall()]
@@ -186,9 +198,14 @@ class MemoryStore:
     def proposals_summary_last_week(self) -> Dict[str, int]:
         since = (datetime.utcnow() - timedelta(days=7)).isoformat()
         with _connect() as conn:
-            total = conn.execute("SELECT COUNT(*) FROM proposals WHERE created_at >= ?", (since,)).fetchone()[0]
+            total = conn.execute(
+                "SELECT COUNT(*) FROM proposals WHERE created_at >= ?", (since,)
+            ).fetchone()[0]
             approved = conn.execute(
-                "SELECT COUNT(*) FROM proposals WHERE approval_date IS NOT NULL AND approval_date >= ?",
+                (
+                    "SELECT COUNT(*) FROM proposals "
+                    "WHERE approval_date IS NOT NULL AND approval_date >= ?"
+                ),
                 (since,),
             ).fetchone()[0]
             return {"created": total, "approved": approved}
@@ -208,12 +225,18 @@ class HistoryLogger:
 
     def approve(self, proposal_id: str, approved_by: str) -> None:
         approval_time = timestamp()
-        self.store.update_proposal_status(proposal_id, status="approved", approval_date=approval_time)
-        self.store.log_history(agent="governance", action="approve", details=f"{approved_by}:{proposal_id}")
+        self.store.update_proposal_status(
+            proposal_id, status="approved", approval_date=approval_time
+        )
+        self.store.log_history(
+            agent="governance", action="approve", details=f"{approved_by}:{proposal_id}"
+        )
 
     def is_approved(self, proposal_id: str) -> bool:
         record = self.store.fetch_proposal(proposal_id)
         return bool(record and record.approval_date)
 
     def list_approvals(self) -> List[str]:
-        return [record.proposal_id for record in self.store.list_proposals() if record.approval_date]
+        return [
+            record.proposal_id for record in self.store.list_proposals() if record.approval_date
+        ]

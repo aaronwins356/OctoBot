@@ -1,4 +1,5 @@
 """Analytics and reporting utilities for OctoBot."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

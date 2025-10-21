@@ -1,4 +1,5 @@
 """Generate placeholder rewrite candidates."""
+
 from __future__ import annotations
 
 import json
@@ -6,15 +7,18 @@ from datetime import date
 from pathlib import Path
 from typing import Dict, List
 
-from octobot.laws.validator import enforce
+from octobot.laws.validator import enforce, guard, register_agent
 from octobot.memory.logger import log_event
 from octobot.memory.utils import proposals_root
+
+register_agent("code_writer")
 
 
 class CodeWriterAgent:
     def __init__(self, repo_root: Path | None = None) -> None:
         self.repo_root = repo_root or Path.cwd()
 
+    @guard("code_writer")
     def create_rewrite_candidates(self, report: Dict[str, List[Dict[str, str]]]) -> Path:
         topic = "refactor" if report.get("findings") else "maintenance"
         proposal_dir = proposals_root() / f"{date.today().isoformat()}_{topic}" / "code"

@@ -1,30 +1,40 @@
-name: CI
+name: Quality Gate
 
 on:
   pull_request:
-    branches: [main]
+    branches: ["*"]
   push:
-    branches: [main]
+    branches: ["main", "work"]
 
 jobs:
-  build:
+  lint-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-      - name: Install dependencies
+          python-version: "3.11"
+
+      - name: Install Poetry
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
-      - name: Lint
-        run: make lint
-      - name: Test
-        env:
-          OFFLINE_MODE: 'true'
-        run: make test
-      - name: Require human approval
-        if: github.event_name == 'pull_request'
+          pip install poetry==1.8.2
+
+      - name: Install dependencies
         run: |
-          echo "This workflow enforces that PRs require manual review before merging. Configure branch protections in GitHub settings."
+          poetry install --no-interaction --no-ansi
+
+      - name: Run pre-commit
+        run: |
+          poetry run pre-commit run --all-files
+
+      - name: Run tests with coverage gate
+        run: |
+          poetry run pytest
+
+      - name: Safety scan
+        run: |
+          poetry run safety check --full-report

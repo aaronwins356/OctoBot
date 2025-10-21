@@ -1,4 +1,5 @@
 """Apply approved proposals."""
+
 from __future__ import annotations
 
 import os
@@ -26,7 +27,12 @@ class Updater:
         self._apply_patch(diff_path)
         commit_sha = self._commit(proposal)
         self._tag_release(proposal, commit_sha)
-        log_event("updater", "apply", "completed", {"proposal": proposal.proposal_id, "commit": commit_sha})
+        log_event(
+            "updater",
+            "apply",
+            "completed",
+            {"proposal": proposal.proposal_id, "commit": commit_sha},
+        )
         return commit_sha
 
     def _apply_patch(self, diff_path: Path) -> None:
@@ -70,11 +76,7 @@ class Updater:
         )
         if commit.returncode != 0:
             raise RuntimeError(commit.stderr.decode())
-        sha = (
-            subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.root)
-            .decode()
-            .strip()
-        )
+        sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=self.root).decode().strip()
         return sha
 
     def _tag_release(self, proposal: Proposal, sha: str) -> None:

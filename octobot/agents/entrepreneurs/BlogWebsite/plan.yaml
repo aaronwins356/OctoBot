@@ -1,0 +1,9 @@
+market: "Thought-leadership content for governance engineering"
+revenue_streams:
+  - "Premium research briefs"
+resources:
+  editors: 2
+  writers: 3
+guardrails:
+  - "All articles reviewed by ethics lead"
+  - "No scraping behind paywalls"

@@ -1,17 +1,17 @@
 """Command line interface for supervising OctoBot."""
+
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import click
 
 from octobot.core.evaluator import Evaluator
 from octobot.core.orchestrator import Orchestrator
 from octobot.core.proposal_manager import ProposalManager
+from octobot.interface.dashboard import create_app
 from octobot.laws.validator import enforce
 from octobot.memory.utils import proposals_root
-from octobot.interface.dashboard import create_app
 
 
 @click.group(name="octobot")
@@ -139,3 +139,28 @@ def main() -> None:
 
 if __name__ == "__main__":  # pragma: no cover - CLI entrypoint
     main()
+
+
+@cli.command()
+def status() -> None:
+    """Show running agents and active proposals."""
+
+    orchestrator = Orchestrator()
+    agents = [
+        ("Analyzer", orchestrator.analyzer.__class__.__name__),
+        ("Tester", orchestrator.tester.__class__.__name__),
+        ("Evaluator", orchestrator.evaluator.__class__.__name__),
+        ("Updater", orchestrator.updater.__class__.__name__),
+    ]
+    click.echo("Agents:")
+    for label, name in agents:
+        click.echo(f" - {label}: {name}")
+    proposals = orchestrator.proposals.list_proposals()
+    click.echo("\nActive proposals:")
+    active_statuses = {"draft", "awaiting_approval", "ready"}
+    active = [proposal for proposal in proposals if proposal.status in active_statuses]
+    if not active:
+        click.echo(" - None")
+    else:
+        for proposal in active:
+            click.echo(f" - {proposal.proposal_id} ({proposal.status}) :: {proposal.summary}")

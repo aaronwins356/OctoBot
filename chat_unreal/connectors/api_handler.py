@@ -11,8 +11,7 @@ from typing import Any, Iterable
 import requests
 
 from .. import config
-from ..api.utils import logging_utils
-from ..api.utils import validators
+from ..api.utils import logging_utils, validators
 from . import rss_reader, web_fetch
 
 
@@ -41,7 +40,9 @@ class CacheStore:
         return cache
 
     def save(self, cache: dict[str, CachedResponse]) -> None:
-        serializable = {key: {"data": value.data, "stored_at": value.stored_at} for key, value in cache.items()}
+        serializable = {
+            key: {"data": value.data, "stored_at": value.stored_at} for key, value in cache.items()
+        }
         with self._path.open("w", encoding="utf-8") as file:
             json.dump(serializable, file, indent=2)
 
@@ -211,7 +212,9 @@ class APIHandler:
         params = {"q": keyword, "sort": "stars", "order": "desc", "per_page": 5}
         headers = {"Accept": "application/vnd.github+json", "User-Agent": "ChatUnrealBot"}
         try:
-            response = self._session.get(url, params=params, headers=headers, timeout=config.DEFAULT_TIMEOUT)
+            response = self._session.get(
+                url, params=params, headers=headers, timeout=config.DEFAULT_TIMEOUT
+            )
             response.raise_for_status()
             data = response.json()
             repositories = [

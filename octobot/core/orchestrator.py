@@ -1,11 +1,12 @@
 """Asynchronous event orchestrator for proposal lifecycles."""
+
 from __future__ import annotations
 
 import asyncio
 import inspect
 import os
 from dataclasses import asdict, dataclass
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 
 from octobot.agents.engineers.analyzer_agent import AnalyzerAgent
 from octobot.agents.engineers.tester_agent import TesterAgent
@@ -70,7 +71,7 @@ class EventBus:
 
     def _ensure_async(self, handler: EventHandler | Callable[[Event], None]) -> EventHandler:
         if inspect.iscoroutinefunction(handler):
-            return handler  # type: ignore[return-value]
+            return cast(EventHandler, handler)
 
         async def wrapper(event: Event) -> None:
             handler(event)
@@ -110,7 +111,9 @@ class Orchestrator:
 
         return asyncio.run(self.async_draft_proposal(topic, proposer))
 
-    async def async_draft_proposal(self, topic: str, proposer: str = "engineers") -> ProposalLifecycle:
+    async def async_draft_proposal(
+        self, topic: str, proposer: str = "engineers"
+    ) -> ProposalLifecycle:
         analysis = self.analyzer.scan_repo()
         proposal = self.proposals.generate(topic, analysis)
         self._proposers[proposal.proposal_id] = proposer
@@ -197,6 +200,16 @@ class Orchestrator:
         if coverage_percent >= 90.0:
             self.proposals.mark_ready_for_review(proposal_id, coverage_percent)
         self.proposals.mark_presented(proposal_id)
+        log_event(
+            "orchestrator",
+            "proposal_validated",
+            "acknowledged",
+            {
+                "proposal": proposal_id,
+                "proposer": proposer,
+                "coverage": coverage_percent,
+            },
+        )
         proposal = self.proposals.load(proposal_id)
         if not proposal:
             return

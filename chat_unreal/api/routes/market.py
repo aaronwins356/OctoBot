@@ -18,7 +18,9 @@ def market() -> Response:
 
     try:
         validators.validate_endpoint("market")
-        payload = validators.validate_payload(request.get_json(silent=True), required_fields=["topic"])
+        payload = validators.validate_payload(
+            request.get_json(silent=True), required_fields=["topic"]
+        )
     except validators.ValidationError as exc:
         return jsonify({"error": exc.message}), 400
 

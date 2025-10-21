@@ -27,10 +27,17 @@ def _post(endpoint: str, payload: dict[str, Any], token: str, base_url: str) -> 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Chat Unreal command line client")
-    parser.add_argument("endpoint", choices=["research", "market", "github"], help="API endpoint to query")
+    parser.add_argument(
+        "endpoint", choices=["research", "market", "github"], help="API endpoint to query"
+    )
     parser.add_argument("value", help="Query string, topic or keyword depending on endpoint")
     parser.add_argument("--token", dest="token", help="API token (defaults to OCTOBOT_KEY env)")
-    parser.add_argument("--base-url", dest="base_url", default=DEFAULT_BASE_URL, help="Base URL of Chat Unreal server")
+    parser.add_argument(
+        "--base-url",
+        dest="base_url",
+        default=DEFAULT_BASE_URL,
+        help="Base URL of Chat Unreal server",
+    )
 
     args = parser.parse_args(argv)
     token = load_token(args.token)

@@ -1,4 +1,5 @@
 """Thin REST connector for the Chat Unreal reasoning service."""
+
 from __future__ import annotations
 
 import json
@@ -62,9 +63,7 @@ def query_unreal(prompt: str) -> str:
 def _fallback(prompt: str) -> UnrealResponse:
     """Provide an offline response if the remote service is unavailable."""
 
-    guidance = (
-        "Chat Unreal is offline; synthesize guidance locally based on governance heuristics."
-    )
+    guidance = "Chat Unreal is offline; synthesize guidance locally based on governance heuristics."
     text = f"[offline] {guidance}\nPrompt: {prompt}"
     return UnrealResponse(prompt=prompt, text=text, source="offline")
 

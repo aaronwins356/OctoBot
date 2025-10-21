@@ -1,10 +1,11 @@
 """Minimal YAML helper with optional PyYAML support."""
+
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable
+from typing import Any, Dict
 
 try:  # pragma: no cover - optional dependency
-    import yaml  # type: ignore
+    import yaml
 except ModuleNotFoundError:  # pragma: no cover - optional dependency missing
     yaml = None  # type: ignore
 

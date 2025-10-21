@@ -1,4 +1,5 @@
 """Repository scanning agent."""
+
 from __future__ import annotations
 
 import ast
@@ -7,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List
 
-from octobot.laws.validator import enforce
+from octobot.laws.validator import enforce, guard, register_agent
 from octobot.memory.logger import log_event
 from octobot.memory.reporter import AnalyzerSummary, Reporter
 from octobot.memory.utils import proposals_root, timestamp
@@ -20,6 +21,9 @@ class AnalyzerFinding:
     detail: str
 
 
+register_agent("analyzer")
+
+
 class AnalyzerAgent:
     """Perform static analysis over the repository tree."""
 
@@ -27,6 +31,7 @@ class AnalyzerAgent:
         self.repo_root = repo_root or Path.cwd()
         self.reporter = reporter or Reporter()
 
+    @guard("analyzer")
     def scan_repo(self) -> Dict[str, object]:
         """Return a structured analysis of the repository."""
         enforce("filesystem_write", str(proposals_root()))
@@ -100,7 +105,11 @@ class AnalyzerAgent:
                         )
                     )
         for node in ast.walk(tree):
-            if isinstance(node, ast.Constant) and isinstance(node.value, str) and "TODO" in node.value:
+            if (
+                isinstance(node, ast.Constant)
+                and isinstance(node.value, str)
+                and "TODO" in node.value
+            ):
                 findings.append(
                     AnalyzerFinding(
                         file_path=str(path.relative_to(self.repo_root)),
@@ -113,7 +122,9 @@ class AnalyzerAgent:
     def _cyclomatic_complexity(self, node: ast.AST) -> int:
         complexity = 1
         for child in ast.walk(node):
-            if isinstance(child, (ast.If, ast.For, ast.While, ast.Try, ast.With, ast.BoolOp, ast.Match)):
+            if isinstance(
+                child, (ast.If, ast.For, ast.While, ast.Try, ast.With, ast.BoolOp, ast.Match)
+            ):
                 complexity += 1
         return complexity
 

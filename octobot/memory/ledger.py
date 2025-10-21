@@ -1,4 +1,5 @@
 """Append-only cryptographic ledger for proposals."""
+
 from __future__ import annotations
 
 import hashlib

@@ -61,7 +61,9 @@ def _robots_for(url: str) -> RobotFileParser:
     if base not in _ROBOT_CACHE:
         parser = RobotFileParser()
         try:
-            response = requests.get(robot_url, headers={"User-Agent": _USER_AGENT}, timeout=config.DEFAULT_TIMEOUT)
+            response = requests.get(
+                robot_url, headers={"User-Agent": _USER_AGENT}, timeout=config.DEFAULT_TIMEOUT
+            )
             if response.status_code == 200:
                 parser.parse(response.text.splitlines())
             else:
@@ -109,7 +111,11 @@ def fetch(url: str, *, force_refresh: bool = False) -> dict[str, Any]:
     soup = BeautifulSoup(response.text, "html.parser")
     title = soup.title.string.strip() if soup.title and soup.title.string else url
     description_tag = soup.find("meta", attrs={"name": "description"})
-    description = description_tag["content"].strip() if description_tag and description_tag.get("content") else ""
+    description = (
+        description_tag["content"].strip()
+        if description_tag and description_tag.get("content")
+        else ""
+    )
     links: list[dict[str, str]] = []
     for anchor in soup.select("a[href]")[:20]:
         href = anchor.get("href", "").strip()
