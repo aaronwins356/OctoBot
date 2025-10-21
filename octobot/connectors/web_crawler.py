@@ -6,19 +6,21 @@ from pathlib import Path
 from typing import Dict, List
 
 from octobot.connectors.unreal_bridge import query_unreal
-from octobot.laws.validator import enforce
+from octobot.laws.validator import enforce, law_enforced
 from octobot.memory.logger import log_event
 
 
 class DocumentationCrawler:
     """Fetch lightweight documentation guidance from Chat Unreal."""
 
+    @law_enforced("external_request")
     def fetch(self, topic: str) -> Dict[str, str]:
         prompt = f"Provide a concise documentation outline for {topic}."
         summary = query_unreal(prompt)
         log_event("crawler", "fetch", "completed", {"topic": topic})
         return {"topic": topic, "summary": summary}
 
+    @law_enforced("filesystem_write")
     def save(self, topic: str, target_dir: Path) -> Path:
         enforce("filesystem_write", str(target_dir))
         target_dir.mkdir(parents=True, exist_ok=True)

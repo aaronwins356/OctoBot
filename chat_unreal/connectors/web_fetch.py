@@ -11,16 +11,18 @@ from typing import Any
 from urllib.parse import urlparse
 from urllib.robotparser import RobotFileParser
 
-import requests
+import httpx
 from bs4 import BeautifulSoup
 
 from .. import config
 from ..api.utils import validators
+from octobot.connectors.utils import ensure_safe_content, log_connector_call, sanitize_text
 
 _USER_AGENT = "ChatUnrealBot/1.0 (+https://example.com/contact)"
 _CACHE_DIR = config.CACHE_DIR / "web"
 _CACHE_DIR.mkdir(parents=True, exist_ok=True)
 _ROBOT_CACHE: dict[str, RobotFileParser] = {}
+_MAX_RETRIES = 2
 
 
 @dataclass(slots=True)
@@ -54,6 +56,30 @@ def _save_to_cache(result: FetchResult) -> None:
         json.dump(result.__dict__, file)
 
 
+def _http_get(url: str, *, headers: dict[str, str]) -> httpx.Response:
+    last_error: BaseException | None = None
+    for attempt in range(_MAX_RETRIES + 1):
+        try:
+            response = httpx.get(url, headers=headers, timeout=config.DEFAULT_TIMEOUT)
+            ensure_safe_content(response.headers.get("Content-Type", "text/plain"))
+            log_connector_call(
+                "chat_unreal.web_fetch",
+                url,
+                "success",
+                {"status_code": response.status_code, "attempt": attempt},
+            )
+            return response
+        except (httpx.HTTPError, ValueError) as exc:
+            last_error = exc
+            log_connector_call(
+                "chat_unreal.web_fetch",
+                url,
+                "error",
+                {"attempt": attempt, "error": repr(exc)},
+            )
+    raise RuntimeError(f"Failed to fetch {url}: {last_error!r}")
+
+
 def _robots_for(url: str) -> RobotFileParser:
     parsed = urlparse(url)
     base = f"{parsed.scheme}://{parsed.netloc}"
@@ -61,15 +87,13 @@ def _robots_for(url: str) -> RobotFileParser:
     if base not in _ROBOT_CACHE:
         parser = RobotFileParser()
         try:
-            response = requests.get(
-                robot_url, headers={"User-Agent": _USER_AGENT}, timeout=config.DEFAULT_TIMEOUT
-            )
+            response = _http_get(robot_url, headers={"User-Agent": _USER_AGENT})
             if response.status_code == 200:
-                parser.parse(response.text.splitlines())
+                parser.parse(sanitize_text(response.text).splitlines())
             else:
                 parser = RobotFileParser()
                 parser.parse(["User-agent: *", "Disallow:"])
-        except requests.RequestException:
+        except Exception:
             parser = RobotFileParser()
             parser.parse(["User-agent: *", "Disallow:"])
         _ROBOT_CACHE[base] = parser
@@ -99,16 +123,12 @@ def fetch(url: str, *, force_refresh: bool = False) -> dict[str, Any]:
             }
 
     try:
-        response = requests.get(
-            url,
-            headers={"User-Agent": _USER_AGENT},
-            timeout=config.DEFAULT_TIMEOUT,
-        )
+        response = _http_get(url, headers={"User-Agent": _USER_AGENT})
         response.raise_for_status()
-    except requests.RequestException as exc:  # pragma: no cover - network failure path
+    except Exception as exc:  # pragma: no cover - network failure path
         return {"error": str(exc), "url": url}
 
-    soup = BeautifulSoup(response.text, "html.parser")
+    soup = BeautifulSoup(sanitize_text(response.text), "html.parser")
     title = soup.title.string.strip() if soup.title and soup.title.string else url
     description_tag = soup.find("meta", attrs={"name": "description"})
     description = (

@@ -9,12 +9,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import httpx
 import feedparser
 
 from .. import config
+from octobot.connectors.utils import ensure_safe_content, log_connector_call, sanitize_text
 
 _CACHE_DIR = config.CACHE_DIR / "rss"
 _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+_MAX_RETRIES = 2
 
 
 @dataclass(slots=True)
@@ -56,7 +59,8 @@ def read_feed(url: str) -> dict[str, Any]:
             "entries": cached.entries,
         }
 
-    parsed = feedparser.parse(url)
+    content = _fetch_feed(url)
+    parsed = feedparser.parse(content)
     entries = []
     for entry in parsed.entries[:20]:
         entries.append(
@@ -75,3 +79,29 @@ def read_feed(url: str) -> dict[str, Any]:
         "fetched_at": result.fetched_at,
         "entries": result.entries,
     }
+
+
+def _fetch_feed(url: str) -> str:
+    headers = {"User-Agent": "ChatUnrealBot/1.0"}
+    last_error: BaseException | None = None
+    for attempt in range(_MAX_RETRIES + 1):
+        try:
+            response = httpx.get(url, headers=headers, timeout=config.DEFAULT_TIMEOUT)
+            ensure_safe_content(response.headers.get("Content-Type", "text/xml"))
+            log_connector_call(
+                "chat_unreal.rss_reader",
+                url,
+                "success",
+                {"status_code": response.status_code, "attempt": attempt},
+            )
+            response.raise_for_status()
+            return sanitize_text(response.text)
+        except (httpx.HTTPError, ValueError) as exc:
+            last_error = exc
+            log_connector_call(
+                "chat_unreal.rss_reader",
+                url,
+                "error",
+                {"attempt": attempt, "error": repr(exc)},
+            )
+    raise RuntimeError(f"Failed to fetch feed {url}: {last_error!r}")

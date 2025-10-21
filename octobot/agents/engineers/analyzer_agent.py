@@ -8,10 +8,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List
 
-from octobot.laws.validator import enforce, guard, register_agent
+from octobot.laws.validator import enforce, guard, law_enforced, register_agent
 from octobot.memory.logger import log_event
 from octobot.memory.reporter import AnalyzerSummary, Reporter
-from octobot.memory.utils import proposals_root, timestamp
+from octobot.memory.utils import load_scan_exclusions, proposals_root, timestamp
 
 
 @dataclass
@@ -27,11 +27,21 @@ register_agent("analyzer")
 class AnalyzerAgent:
     """Perform static analysis over the repository tree."""
 
-    def __init__(self, repo_root: Path | None = None, reporter: Reporter | None = None) -> None:
+    def __init__(
+        self,
+        repo_root: Path | None = None,
+        reporter: Reporter | None = None,
+        exclusions: Iterable[str] | None = None,
+    ) -> None:
         self.repo_root = repo_root or Path.cwd()
         self.reporter = reporter or Reporter()
+        default_exclusions = {"venv", ".venv", ".git"}
+        self._exclusions = set(load_scan_exclusions(default_exclusions))
+        if exclusions:
+            self._exclusions.update(exclusions)
 
     @guard("analyzer")
+    @law_enforced("filesystem_write")
     def scan_repo(self) -> Dict[str, object]:
         """Return a structured analysis of the repository."""
         enforce("filesystem_write", str(proposals_root()))
@@ -82,7 +92,15 @@ class AnalyzerAgent:
 
     def _iter_python_files(self) -> Iterable[Path]:
         for path in self.repo_root.rglob("*.py"):
-            if "__pycache__" in path.parts or path.parts[0] in {"venv", ".git"}:
+            if "__pycache__" in path.parts:
+                continue
+            try:
+                rel_path = path.relative_to(self.repo_root)
+            except ValueError:
+                continue
+            if not rel_path.parts:
+                continue
+            if rel_path.parts[0] in self._exclusions:
                 continue
             yield path
 

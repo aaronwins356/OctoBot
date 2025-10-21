@@ -10,6 +10,10 @@ Connector interfaces for OctoBot.
 
 Thin REST connector for the Chat Unreal reasoning service.
 
+## octobot.connectors.utils
+
+Common helpers for hardened connector implementations.
+
 ## octobot.connectors.web_crawler
 
 Documentation crawler leveraging the Chat Unreal bridge.

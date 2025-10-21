@@ -6,6 +6,8 @@ import re
 from dataclasses import dataclass
 from typing import Iterable
 
+from urllib.parse import urlparse
+
 from ... import config
 
 
@@ -52,13 +54,23 @@ def validate_payload(
     return payload
 
 
+def _domain_allowed(url: str, allowed_domains: Iterable[str]) -> bool:
+    hostname = urlparse(url).hostname or ""
+    hostname = hostname.lower()
+    for domain in allowed_domains:
+        candidate = domain.lower().strip()
+        if not candidate:
+            continue
+        if hostname == candidate or hostname.endswith(f".{candidate}"):
+            return True
+    return False
+
+
 def validate_domain(url: str) -> None:
     """Ensure a URL belongs to an allowed domain."""
 
-    for domain in config.ALLOWED_DOMAINS:
-        if domain in url:
-            return
-    raise ValidationError(f"Domain not permitted: {url}")
+    if not _domain_allowed(url, config.ALLOWED_DOMAINS):
+        raise ValidationError(f"Domain not permitted: {url}")
 
 
 def validate_endpoint(endpoint: str) -> None:

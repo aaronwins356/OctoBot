@@ -20,6 +20,23 @@ from octobot.memory.logger import log_event
 from octobot.memory.utils import timestamp
 
 EventHandler = Callable[["Event"], Awaitable[None]]
+_EVENT_QUEUE: "asyncio.Queue[tuple[str, Dict[str, Any]]]" = asyncio.Queue()
+
+
+async def publish(event_name: str, payload: Dict[str, Any]) -> None:
+    """Publish *payload* to the global orchestrator queue."""
+
+    await _EVENT_QUEUE.put((event_name, payload))
+
+
+async def consume(orchestrator: "Orchestrator") -> None:
+    """Consume queued events and dispatch via the orchestrator bus."""
+
+    while not _EVENT_QUEUE.empty():
+        event_name, payload = await _EVENT_QUEUE.get()
+        await orchestrator.bus.publish(event_name, payload)
+        await orchestrator.bus.flush()
+        _EVENT_QUEUE.task_done()
 
 
 @dataclass(frozen=True)
@@ -118,11 +135,11 @@ class Orchestrator:
         proposal = self.proposals.generate(topic, analysis)
         self._proposers[proposal.proposal_id] = proposer
         self.store.log_history("orchestrator", "proposal_created", proposal.proposal_id)
-        await self.bus.publish(
+        await publish(
             "proposal.created",
             {"proposal_id": proposal.proposal_id, "proposer": proposer, "analysis": analysis},
         )
-        await self.bus.flush()
+        await consume(self)
         validation = self._validation_reports.get(proposal.proposal_id)
         evaluation = self._evaluation_scores.get(proposal.proposal_id)
         return ProposalLifecycle(
@@ -142,11 +159,11 @@ class Orchestrator:
         if not proposal:
             return None
         self.proposals.approve(proposal_id, approver)
-        await self.bus.publish(
+        await publish(
             "proposal.approved",
             {"proposal_id": proposal_id, "approver": approver},
         )
-        await self.bus.flush()
+        await consume(self)
         return self._applied_commits.get(proposal_id)
 
     def _register_handlers(self) -> None:
@@ -196,9 +213,10 @@ class Orchestrator:
         self._validation_reports[proposal_id] = report
         if not report.compliant:
             return
-        coverage_percent = report.coverage * 100.0
-        if coverage_percent >= 90.0:
-            self.proposals.mark_ready_for_review(proposal_id, coverage_percent)
+        coverage_fraction = max(0.0, min(report.coverage, 1.0))
+        coverage_percent = coverage_fraction * 100.0
+        if coverage_fraction >= 0.9:
+            self.proposals.mark_ready_for_review(proposal_id, coverage_fraction)
         self.proposals.mark_presented(proposal_id)
         log_event(
             "orchestrator",
@@ -207,7 +225,8 @@ class Orchestrator:
             {
                 "proposal": proposal_id,
                 "proposer": proposer,
-                "coverage": coverage_percent,
+                "coverage_fraction": coverage_fraction,
+                "coverage_percent": coverage_percent,
             },
         )
         proposal = self.proposals.load(proposal_id)
@@ -218,7 +237,7 @@ class Orchestrator:
                 {
                     "id": proposal.proposal_id,
                     "summary": proposal.summary,
-                    "coverage": coverage_percent,
+                    "coverage": coverage_fraction,
                 }
             ]
         )
@@ -295,4 +314,4 @@ class Orchestrator:
         )
 
 
-__all__ = ["Event", "EventBus", "Orchestrator", "ProposalLifecycle"]
+__all__ = ["Event", "EventBus", "Orchestrator", "ProposalLifecycle", "publish", "consume"]

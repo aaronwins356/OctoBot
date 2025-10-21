@@ -5,6 +5,7 @@ This site is generated nightly from module docstrings to keep guidance in sync w
 ## Module Overview
 - **octobot.connectors** – Connector interfaces for OctoBot.
 - **octobot.connectors.unreal_bridge** – Thin REST connector for the Chat Unreal reasoning service.
+- **octobot.connectors.utils** – Common helpers for hardened connector implementations.
 - **octobot.connectors.web_crawler** – Documentation crawler leveraging the Chat Unreal bridge.
 - **octobot.core** – Government package for OctoBot governance modules.
 - **octobot.core.compiler** – Compile evaluated proposals into summary artifacts.
@@ -22,4 +23,3 @@ This site is generated nightly from module docstrings to keep guidance in sync w
 - **octobot.memory.history_logger** – Database-backed storage for OctoBot state.
 - **octobot.memory.ledger** – Append-only cryptographic ledger for proposals.
 - **octobot.memory.logger** – Structlog-backed logging utilities for OctoBot.
-- **octobot.memory.reflector** – Aggregate operational logs into weekly reflection digests.

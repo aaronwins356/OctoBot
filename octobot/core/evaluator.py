@@ -26,10 +26,12 @@ class Evaluator:
         for proposal in proposals:
             summary = str(proposal.get("summary", ""))
             coverage = _to_float(proposal.get("coverage", 0.0))
+            if coverage > 1:
+                coverage /= 100.0
             complexity = 0.8 if "refactor" in summary.lower() else 0.6
-            tests = min(1.0, coverage / 100.0)
+            tests = min(1.0, coverage)
             docs = 0.9 if "doc" in summary.lower() else 0.6
-            risk = 0.3 if coverage >= 90 else 0.5
+            risk = 0.3 if coverage >= 0.9 else 0.5
             evaluation = Evaluation(
                 proposal_id=str(proposal.get("id")),
                 complexity=complexity,
