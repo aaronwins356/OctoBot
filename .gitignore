@@ -1,15 +1,12 @@
-# Virtual environments
-venv/
-
-# Local data and models
-data/
-logs/
-models/
-workspace/
-
-# Python caches
 __pycache__/
 *.pyc
-
-# Test cache
-.pytest_cache/
+.venv/
+.env
+logs/*.log
+logs/reflections/*.txt
+sandbox/agents/*
+sandbox/proposals/*
+memory/data/*.db
+.idea/
+.vscode/
+.DS_Store

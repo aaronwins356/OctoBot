@@ -1,19 +1,37 @@
-app:
-  name: "The Brain"
-  environment: "development"
-  model_dir: "/workspace/models"
-  data_dir: "/workspace/data"
-  log_dir: "/workspace/logs"
-orchestrator:
-  max_depth: 3
-  evaluation_threshold: 0.6
-memory:
-  database_path: "data/brain.db"
-  embedding_dim: 128
-actions:
-  sandbox_dir: "sandbox"
-safety:
-  require_human_approval: true
-  allowed_domains:
-    - "example.com"
-    - "localhost"
+runtime:
+  offline_mode: true
+  enforcement_version: "1.0.0"
+  constitution_path: "laws/constitution.yaml"
+  logs_dir: "logs"
+  reflections_dir: "logs/reflections"
+  sandbox_root: "sandbox/agents"
+  proposal_dir: "sandbox/proposals"
+  db_path: "memory/data/state.db"
+  ledger_path: "memory/data/ledger.db"
+  max_runtime_seconds: 30
+  max_memory_mb: 128
+
+network:
+  github_api_url: "https://api.github.com"
+  default_repo: ""
+
+security:
+  allowed_write_paths:
+    - "sandbox/agents"
+    - "sandbox/proposals"
+  disallowed_imports:
+    - "os.system"
+    - "subprocess"
+    - "shutil.rmtree"
+    - "importlib"
+    - "socket"
+  forbidden_calls:
+    - "os.system"
+    - "subprocess.Popen"
+    - "subprocess.run"
+    - "eval"
+    - "exec"
+
+simulation:
+  starting_credit: 10
+  reward_per_success: 5

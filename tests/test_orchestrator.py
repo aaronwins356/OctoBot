@@ -1,25 +1,20 @@
-"""End-to-end test for orchestrator execution."""
-from pathlib import Path
+"""Tests for orchestrator dry-run execution."""
+from __future__ import annotations
 
-from orchestrator.main_controller import ExecutiveOrchestrator, OrchestratorConfig
-from memory.recall import MemoryRecall
-from reasoning.local_llm_client import LocalLLMClient
-from reasoning.reflection_engine import ReflectionEngine
-from safety.audit_log import AuditLogger
-from safety.rules import SafetyRules
+import memory
+from government import orchestrator
 
 
-def test_execute_goal_produces_insights(tmp_path: Path) -> None:
-    memory = MemoryRecall(database_path=str(tmp_path / "brain.db"), embedding_dim=16)
-    orchestrator = ExecutiveOrchestrator(
-        config=OrchestratorConfig(evaluation_threshold=0.1, max_depth=2),
-        llm_client=LocalLLMClient(use_stub=True),
-        memory=memory,
-        reflection=ReflectionEngine(),
-        audit_logger=AuditLogger(log_path=tmp_path / "audit.log"),
-        safety_rules=SafetyRules(),
-    )
-    result = orchestrator.execute_goal("Document the API endpoints and summarize outputs.")
-    assert result["insights"].startswith("Reflection")
-    assert result["plan"].goal.startswith("Document the API")
-    assert result["results"]
+def test_run_all_agents_dry_run(monkeypatch):
+    events: list[tuple[str, dict]] = []
+    monkeypatch.setattr(memory, "store_event", lambda agent, event: events.append((agent, event)))
+
+    def fail_run(*args, **kwargs):  # pragma: no cover - should not be called
+        raise AssertionError("Subprocess should not run during dry run")
+
+    monkeypatch.setattr(orchestrator, "run_agent_subprocess", fail_run)
+
+    orchestrator.run_all_agents(dry_run=True)
+    assert events
+    for _, event in events:
+        assert event["status"] == "validated"
