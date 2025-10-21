@@ -73,9 +73,18 @@ def create_app() -> FastAPI:
     @app.get("/metrics", response_class=HTMLResponse)
     async def metrics(request: Request) -> HTMLResponse:
         keys: List[str] = ["coverage", "files_scanned", "todos", "missing_docstrings"]
-        data: Dict[str, List[Dict[str, str]]] = {
-            key: reporter.store.fetch_metrics(key, limit=1) for key in keys
-        }
+        data: Dict[str, List[Dict[str, str]]] = {}
+        for key in keys:
+            series = reporter.store.fetch_metrics(key, limit=1)
+            if key == "coverage":
+                for item in series:
+                    try:
+                        value = float(item.get("value", 0.0))
+                    except (TypeError, ValueError):
+                        value = 0.0
+                    scaled = round(value * 100.0, 2)
+                    item["value"] = f"{scaled:.2f}"
+            data[key] = series
         summary = reporter.generate_weekly_summary()
         return _TEMPLATES.TemplateResponse(
             "metrics.html",

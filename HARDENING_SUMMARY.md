@@ -20,3 +20,10 @@
 
 ## Miscellaneous
 - Refactored memory utilities to use PyYAML, added structlog-based logging, and created nightly documentation regeneration workflow.
+
+## 2025 Hardening Sprint
+- AnalyzerAgent now honours `config/scan_exclusions.yaml` and skips heavy directories (`.venv`, `.git`) for deterministic performance.
+- Proposal coverage is normalised to 0–1 fractions end-to-end; dashboards only scale values for display and a migration script corrects historical records.
+- Chat Unreal domain validation matches exact hostnames or sanctioned subdomains, blocking `github.com.evil`-style attacks.
+- Connectors enforce five-second timeouts, two retries, strict content-type checks, sanitised bodies, and audit logging in `memory/connector_audit.log`.
+- Asynchronous orchestration flows through a shared asyncio queue, improving reproducibility during validation and tests.

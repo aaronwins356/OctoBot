@@ -55,21 +55,23 @@ def evaluate(proposal_id: str) -> None:
     if not proposal:
         click.echo("Proposal not found.")
         raise SystemExit(1)
-    coverage = proposal.coverage if proposal.coverage > 1 else proposal.coverage * 100
+    coverage_fraction = max(0.0, min(proposal.coverage, 1.0))
+    coverage_percent = coverage_fraction * 100
     evaluator = Evaluator()
     evaluation = evaluator.score(
         [
             {
                 "id": proposal.proposal_id,
                 "summary": proposal.summary,
-                "coverage": coverage,
+                "coverage": coverage_fraction,
             }
         ]
     )
     payload = {
         "id": proposal.proposal_id,
         "status": proposal.status,
-        "coverage": coverage,
+        "coverage_fraction": round(coverage_fraction, 4),
+        "coverage_percent": round(coverage_percent, 2),
         "summary": proposal.summary,
     }
     if evaluation:

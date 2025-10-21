@@ -12,7 +12,7 @@ CACHE_DIR: Final[Path] = DATA_DIR / "cache"
 LOG_DIR: Final[Path] = Path("logs")
 LOG_FILE: Final[Path] = LOG_DIR / "api_calls.log"
 RESEARCH_HISTORY_FILE: Final[Path] = CACHE_DIR / "research_history.json"
-DEFAULT_TIMEOUT: Final[int] = 10
+DEFAULT_TIMEOUT: Final[int] = 5
 CACHE_TTL_SECONDS: Final[int] = 60 * 30  # 30 minutes
 
 ALLOWED_DOMAINS: Final[tuple[str, ...]] = (

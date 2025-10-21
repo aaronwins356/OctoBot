@@ -6,9 +6,9 @@ from typing import Any, cast
 
 import structlog
 
-from octobot.memory.utils import ensure_directory, logs_root, timestamp
+from octobot.memory.utils import ensure_directory, log_file_path, timestamp
 
-_EVENT_LOG = logs_root() / "events.jsonl"
+_EVENT_LOG = log_file_path()
 ensure_directory(_EVENT_LOG.parent)
 
 
@@ -17,11 +17,13 @@ def _configure_structlog() -> None:
         return
     structlog.configure(
         processors=[
-            structlog.processors.add_log_level,
             structlog.processors.TimeStamper(fmt="iso"),
+            structlog.processors.add_log_level,
             structlog.processors.JSONRenderer(),
         ],
-        logger_factory=structlog.WriteLoggerFactory(file=_EVENT_LOG.open("a", encoding="utf-8")),
+        logger_factory=structlog.WriteLoggerFactory(
+            file=_EVENT_LOG.open("a", encoding="utf-8")
+        ),
     )
 
 

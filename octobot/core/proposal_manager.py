@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Sequence, cast
 
-from octobot.laws.validator import enforce
+from octobot.laws.validator import enforce, law_enforced
 from octobot.memory.history_logger import MemoryStore, ProposalRecord
 from octobot.memory.logger import log_event
 from octobot.memory.utils import dump_yaml, load_yaml, proposals_root, timestamp
@@ -30,6 +30,7 @@ class ProposalManager:
     def __init__(self, store: MemoryStore | None = None) -> None:
         self.store = store or MemoryStore()
 
+    @law_enforced("filesystem_write")
     def generate(self, topic: str, analysis: Dict[str, Any]) -> Proposal:
         proposal_id = self._make_identifier(topic)
         proposal_dir = proposals_root() / proposal_id
@@ -37,13 +38,14 @@ class ProposalManager:
         proposal_dir.mkdir(parents=True, exist_ok=True)
         findings_source = cast(Sequence[Any], analysis.get("findings", []))
         summary_text = f"Improve {topic} to address {len(findings_source)} findings."
+        coverage = self._normalize_coverage(analysis.get("coverage", 0.0))
         metadata: Dict[str, Any] = {
             "id": proposal_id,
             "topic": topic,
             "status": "draft",
             "created_at": timestamp(),
             "summary": summary_text,
-            "coverage": analysis.get("coverage", 0.0),
+            "coverage": coverage,
         }
         metadata_path = proposal_dir / "proposal.yaml"
         enforce("filesystem_write", str(metadata_path))
@@ -114,12 +116,20 @@ class ProposalManager:
                 return proposal
         return None
 
+    @law_enforced("filesystem_write")
     def mark_ready_for_review(self, proposal_id: str, coverage: float) -> None:
-        if coverage < 90.0:
+        normalized = self._normalize_coverage(coverage)
+        if normalized < 0.9:
             raise ValueError("Test coverage must be at least 90% before review")
         self.store.update_proposal_status(proposal_id, "ready", None)
-        self._update_metadata(proposal_id, {"status": "ready", "coverage": coverage})
-        log_event("proposals", "ready", "queued", {"proposal": proposal_id, "coverage": coverage})
+        metadata = {"status": "ready", "coverage": round(normalized, 4)}
+        self._update_metadata(proposal_id, metadata)
+        log_event(
+            "proposals",
+            "ready",
+            "queued",
+            {"proposal": proposal_id, "coverage": metadata["coverage"]},
+        )
 
     def mark_presented(self, proposal_id: str) -> None:
         self.store.update_proposal_status(proposal_id, "awaiting_approval", None)
@@ -170,7 +180,7 @@ class ProposalManager:
         return {
             "proposal_id": metadata["id"],
             "purpose": metadata.get("summary", ""),
-            "expected_coverage": float(analysis.get("coverage", 0.0) or 0.0),
+            "expected_coverage": self._normalize_coverage(analysis.get("coverage", 0.0)),
             "risk": "low" if complexity_penalty < 10 else "medium",
             "roi": round(roi, 2),
             "benefits": {
@@ -179,6 +189,7 @@ class ProposalManager:
             },
         }
 
+    @law_enforced("filesystem_write")
     def _update_metadata(self, proposal_id: str, updates: Dict[str, Any]) -> None:
         proposal = self.load(proposal_id)
         if not proposal:
@@ -188,3 +199,17 @@ class ProposalManager:
         data = load_yaml(metadata_path)
         data.update(updates)
         dump_yaml(data, metadata_path)
+
+    @staticmethod
+    def _normalize_coverage(value: object) -> float:
+        coverage = 0.0
+        if isinstance(value, (int, float)):
+            coverage = float(value)
+        else:
+            try:
+                coverage = float(str(value))
+            except (TypeError, ValueError):
+                coverage = 0.0
+        if coverage > 1:
+            coverage /= 100.0
+        return max(0.0, min(coverage, 1.0))

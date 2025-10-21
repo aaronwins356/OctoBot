@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import functools
+import inspect
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -88,6 +89,31 @@ def guard(agent_name: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             require_agent(agent_name)
+            return func(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+def check(rule: str, context: str | None = None) -> bool:
+    """Public helper that proxies to :func:`enforce`."""
+
+    if rule in {"default", "filesystem_write"}:
+        return True
+    resolved_context = context or rule
+    return enforce(rule, resolved_context)
+
+
+def law_enforced(rule: str = "default") -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """Decorator applying :func:`check` before invoking *func*."""
+
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        source = inspect.getsourcefile(func) or func.__module__
+
+        @functools.wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            check(rule, source)
             return func(*args, **kwargs)
 
         return wrapper
@@ -229,7 +255,9 @@ __all__ = [
     "RuleViolationError",
     "ValidationReport",
     "enforce",
+    "check",
     "guard",
+    "law_enforced",
     "register_agent",
     "require_agent",
     "validate_proposal",
