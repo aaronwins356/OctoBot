@@ -1,8 +1,9 @@
 """Documentation crawler leveraging the Chat Unreal bridge."""
+
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List
 
 from octobot.connectors.unreal_bridge import query_unreal
 from octobot.laws.validator import enforce
@@ -30,4 +31,19 @@ class DocumentationCrawler:
         return destination
 
 
-__all__ = ["DocumentationCrawler"]
+class WebCrawler:
+    """Generic wrapper for sanctioned web lookups via Unreal bridge."""
+
+    def search(self, topic: str, limit: int = 5) -> List[str]:
+        prompt = f"Summarise recent public info about {topic}."
+        response = query_unreal(prompt)
+        log_event(
+            "crawler",
+            "search",
+            "completed",
+            {"topic": topic, "limit": limit},
+        )
+        return [response][:limit]
+
+
+__all__ = ["DocumentationCrawler", "WebCrawler"]

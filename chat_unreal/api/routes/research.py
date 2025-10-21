@@ -18,7 +18,9 @@ def research() -> Response:
 
     try:
         validators.validate_endpoint("research")
-        payload = validators.validate_payload(request.get_json(silent=True), required_fields=["query"])
+        payload = validators.validate_payload(
+            request.get_json(silent=True), required_fields=["query"]
+        )
     except validators.ValidationError as exc:
         return jsonify({"error": exc.message}), 400
 

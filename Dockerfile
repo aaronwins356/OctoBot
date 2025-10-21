@@ -1,18 +1,22 @@
 FROM python:3.11-slim
 
-WORKDIR /app
+ENV POETRY_VERSION=1.8.2 \
+    POETRY_HOME=/opt/poetry \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=off \
+    POETRY_VIRTUALENVS_CREATE=false
 
-COPY pyproject.toml poetry.lock* requirements.txt* ./
+ENV PATH="$POETRY_HOME/bin:$PATH"
 
-RUN pip install --no-cache-dir poetry && \
-    if [ -f pyproject.toml ]; then poetry export -f requirements.txt --output requirements.txt --without-hashes; fi && \
-    if [ -f requirements.txt ]; then pip install --no-cache-dir -r requirements.txt; fi
+WORKDIR /workspace
+VOLUME ["/workspace"]
+
+COPY pyproject.toml poetry.lock* ./
+
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir "poetry==${POETRY_VERSION}" && \
+    poetry install --only main --only dev --no-interaction --no-ansi
 
 COPY . .
 
-ENV APP_ENV=development \
-    UNREAL_API_URL=http://127.0.0.1:8080 \
-    DB_PATH=memory/memory.db \
-    AUTO_ANALYZE_INTERVAL=weekly
-
-CMD ["python", "-m", "octobot.interface.cli", "list-proposals"]
+CMD ["poetry", "run", "octobot", "status"]

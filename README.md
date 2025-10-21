@@ -1,53 +1,96 @@
-# OctoBot: The Self-Improvement Framework
+# OctoBot Governance Platform
 
-OctoBot is a modular research framework that learns to analyze its own codebase, surface improvement proposals, and queue
-changes for human approval. The goal is to demonstrate scalable self-analysis and transparent reasoning for AI software
-projects without removing humans from the loop.
+OctoBot is a constitutional automation stack that drafts, evaluates, and hardens code changes under
+strict human oversight. Every autonomous action is logged, validated against runtime laws, and stored
+for later reflection.
 
-## Key Features
-- **Human Oversight:** Every proposed change is queued for review and cannot be merged without explicit approval from the
-  dashboard.
-- **Transparency:** Analyzer reports, generated proposals, risk assessments, and decisions are recorded in natural language
-  and stored for auditing.
-- **Reproducibility:** All merges are performed through Git commits logged by the updater module after approval.
-- **Ethics Guardrails:** YAML constitutions constrain network access, mandate rationale logging, and ensure proposals serve
-  human benefit.
+## System Architecture
 
-## Repository Layout
 ```
-octobot/core/         # Orchestration, proposal management, scoring, merging
-octobot/agents/       # Engineer and entrepreneur agents for analysis and innovation
-octobot/laws/         # Constitutional documents and validators enforcing compliance
-octobot/connectors/   # Interfaces to external systems (Chat Unreal bridge, crawlers)
-octobot/interface/    # Human-facing CLI and FastAPI + HTMX dashboard
-octobot/memory/       # SQLite persistence, metrics, logging utilities, and ledger
-octobot/utils/        # Shared helper utilities
-octobot/tests/        # Automated regression tests
-proposals/            # Generated proposal packages awaiting review
-scripts/              # Helper scripts for bootstrapping and maintenance
-docs/                 # Architectural documentation and user guides
+┌────────────┐      ┌──────────────┐      ┌────────────┐
+│ Engineers  │      │  Orchestrator│      │   Updater  │
+│ (Analyzer, │─────▶│  & Evaluator │─────▶│(Dry-run or │
+│ Writer,    │      └──────┬───────┘      │  Commit)   │
+│ Tester,     │            │              └────┬───────┘
+│ Documentor) │            │                   │
+└────┬────────┘            │                   │
+     │                     ▼                   ▼
+     │            ┌──────────────┐      ┌──────────────┐
+     │            │ Proposal      │      │ Laws/Validator│
+     └───────────▶│ Manager &     │◀────▶│ + Audit       │
+                  │ Ledger        │      └──────────────┘
+                  └──────┬───────┘
+                         ▼
+                 ┌──────────────┐
+                 │ Interface     │
+                 │ (CLI & UI)    │
+                 └──────────────┘
 ```
+
+## Key Capabilities
+
+- **Poetry-first toolchain** with reproducible dependency management and isolated dev/test groups.
+- **Constitutional enforcement** via `octobot.laws.validator`, `ethics.yaml`, and `tech_standards.yaml`.
+- **Entrepreneur simulations** for trading, blogging, and software ventures under strict guardrails.
+- **Structlog telemetry** streamed to `memory/logs/events.jsonl` for weekly reflection digests.
+- **FastAPI dashboard** presenting proposal purpose, ROI, risk, and validation results.
+- **Nightly documentation regeneration** driven by the documentor agent and GitHub Actions.
 
 ## Getting Started
-1. Create a virtual environment and install dependencies:
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate
-   pip install -r requirements.txt
-   ```
-2. Initialize the database and generate an example proposal:
-   ```bash
-   python -m octobot.interface.cli propose "Architecture Review"
-   ```
-3. Launch the dashboard to inspect proposals, laws, and history:
-   ```bash
-   python -m octobot.interface.cli dashboard
-   ```
-4. Approve a proposal through the dashboard or CLI (`python -m octobot.interface.cli approve <proposal_id>`). The orchestrator runs tests and applies the change after approval.
 
-## Safety Principles
-- **No Unreviewed Execution:** `laws/constitution.yaml` forbids automatic merges without human approval.
-- **Network Isolation:** All outbound requests must pass through `connectors/unreal_bridge.py`.
-- **Explainability:** Each proposal includes machine-generated rationale logged to the history database.
+1. Install Poetry 1.8+ and clone the repository.
+2. Install dependencies and activate pre-commit hooks:
+   ```bash
+   poetry install
+   poetry run pre-commit install
+   ```
+3. Regenerate documentation and run the initial analysis:
+   ```bash
+   poetry run python -m octobot.agents.engineers.documentor_agent
+   poetry run octobot propose "Architecture Review"
+   ```
+4. Inspect the proposal through the CLI or launch the dashboard:
+   ```bash
+   poetry run octobot status
+   poetry run python -m octobot.interface.cli dashboard
+   ```
 
-Refer to `docs/ARCHITECTURE.md` for a comprehensive overview of the subsystem interactions and workflows.
+## Docker Environment
+
+The provided Dockerfile builds a lightweight Python 3.11 image, installs Poetry dependencies, mounts
+`/workspace`, and starts the CLI status command by default. Use it for reproducible CI or air-gapped
+analysis:
+
+```bash
+docker build -t octobot .
+docker run --rm -it -v "$(pwd)":/workspace octobot poetry run octobot status
+```
+
+## Quality Gates
+
+- Pre-commit enforces **black**, **isort**, **flake8**, and **mypy** on every commit.
+- GitHub Actions run linting, pytest + coverage (90% threshold), and safety scans on each PR.
+- Integration tests cover the full proposal lifecycle (`tests/test_full_cycle.py`).
+
+## Directory Overview
+
+- `octobot/agents/engineers/` – proposal analysis, authoring, documentation, and testing agents.
+- `octobot/agents/entrepreneurs/` – trading, blogging, and software venture simulations with plans.
+- `octobot/laws/` – constitution, ethics, tech standards, validator, and audit tooling.
+- `octobot/memory/` – structlog logger, reflector digests, ledger, and utilities.
+- `interface/` – CLI and FastAPI dashboard for human oversight.
+- `tests/` – pytest + hypothesis suites by subsystem plus end-to-end coverage.
+
+## Safety & Oversight
+
+- All agents must register with the validator before autonomous execution.
+- Proposals remain in `/proposals` until human approval; merges require coverage ≥ 90%.
+- Weekly reflection digests summarise successes, failures, and improvement suggestions without
+  mutating code.
+
+## Nightly Documentation
+
+The `Documentation Nightly` workflow invokes `octobot.agents.engineers.documentor_agent` to rebuild
+`docs/index.md`, `architecture.md`, `laws.md`, and `developer_guide.md` from live docstrings.
+
+For deeper architectural notes consult the regenerated docs under `/docs/`.

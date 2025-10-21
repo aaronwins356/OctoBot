@@ -1,0 +1,11 @@
+quality_gates:
+  min_coverage: 0.9
+  require_diff: true
+  require_rationale: true
+  prohibit_runtime_mutation: true
+logging:
+  format: json
+  transport: file
+api_usage:
+  - "Only interact with sanctioned connectors and adapters"
+  - "Do not mutate production services during simulation"

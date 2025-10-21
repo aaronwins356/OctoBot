@@ -1,4 +1,5 @@
 """Wrapper around pytest execution."""
+
 from __future__ import annotations
 
 import os
@@ -6,14 +7,17 @@ import subprocess
 from pathlib import Path
 from typing import Dict
 
-from octobot.laws.validator import enforce
+from octobot.laws.validator import enforce, guard, register_agent
 from octobot.memory.logger import log_event
+
+register_agent("tester")
 
 
 class TesterAgent:
     def __init__(self, repo_root: Path | None = None) -> None:
         self.repo_root = repo_root or Path.cwd()
 
+    @guard("tester")
     def run_tests(self) -> Dict[str, str | int]:
         enforce("filesystem_write", str(self.repo_root / "proposals"))
         if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("OCTOBOT_ALLOW_TEST_SKIP"):

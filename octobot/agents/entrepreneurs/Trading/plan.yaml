@@ -1,0 +1,9 @@
+market: "Algorithmic insights for ethical trading cooperatives"
+revenue_streams:
+  - "Subscription analytics"
+resources:
+  capital: "Human oversight only"
+  compute: "GPU-accelerated backtesting sandbox"
+guardrails:
+  - "No autonomous trades"
+  - "Only use historical or synthetic data"

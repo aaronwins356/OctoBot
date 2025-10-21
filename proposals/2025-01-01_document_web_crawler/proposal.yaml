@@ -1,5 +1,0 @@
-id: 2025-01-01_document_web_crawler
-impact: medium
-risk: low
-summary: "Add documentation to connectors/web_crawler.py"
-rationale: "Provide clarity on the simulated crawling process and governance compliance."

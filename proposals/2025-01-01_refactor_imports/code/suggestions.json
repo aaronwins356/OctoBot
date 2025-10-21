@@ -1,7 +1,0 @@
-[
-  {
-    "file": "engineers/analyzer_agent.py",
-    "issue": "imports",
-    "recommendation": "Group standard library imports and remove unused symbols."
-  }
-]

@@ -1,17 +1,31 @@
-"""Central logging utilities for OctoBot."""
+"""Structlog-backed logging utilities for OctoBot."""
+
 from __future__ import annotations
 
-import json
-import logging
-from logging.handlers import RotatingFileHandler
-from typing import Any, Dict
+from typing import Any, cast
 
-from .utils import ensure_directory, repo_root, timestamp
+import structlog
 
-_LOG_PATH = repo_root() / "memory" / "system.log"
-ensure_directory(_LOG_PATH.parent)
+from octobot.memory.utils import ensure_directory, logs_root, timestamp
 
-_LOGGERS: Dict[str, logging.Logger] = {}
+_EVENT_LOG = logs_root() / "events.jsonl"
+ensure_directory(_EVENT_LOG.parent)
+
+
+def _configure_structlog() -> None:
+    if structlog.is_configured():  # pragma: no cover - defensive
+        return
+    structlog.configure(
+        processors=[
+            structlog.processors.add_log_level,
+            structlog.processors.TimeStamper(fmt="iso"),
+            structlog.processors.JSONRenderer(),
+        ],
+        logger_factory=structlog.WriteLoggerFactory(file=_EVENT_LOG.open("a", encoding="utf-8")),
+    )
+
+
+_configure_structlog()
 
 
 def _serialise_details(details: Any) -> Any:
@@ -19,47 +33,45 @@ def _serialise_details(details: Any) -> Any:
         return details
     if isinstance(details, dict):
         return details
-    if isinstance(details, (list, tuple)):
+    if isinstance(details, (list, tuple, set)):
         return list(details)
     return repr(details)
 
 
-def _configure_logger(name: str) -> logging.Logger:
-    logger = logging.getLogger(f"octobot.{name}")
-    if logger.handlers:
-        return logger
-    logger.setLevel(logging.INFO)
-    handler = RotatingFileHandler(_LOG_PATH, maxBytes=1_048_576, backupCount=3)
-    handler.setFormatter(logging.Formatter("%(message)s"))
-    logger.addHandler(handler)
-    logger.propagate = False
-    return logger
+def get_logger(agent: str) -> structlog.BoundLogger:
+    """Return a structlog logger bound to *agent*."""
 
-
-def get_logger(agent: str) -> logging.Logger:
-    """Return a logger instance scoped to *agent*."""
-    if agent not in _LOGGERS:
-        _LOGGERS[agent] = _configure_logger(agent)
-    return _LOGGERS[agent]
+    return cast(structlog.BoundLogger, structlog.get_logger(agent=agent))
 
 
 def log_event(agent: str, action: str, status: str, details: Any) -> None:
-    """Write a structured log entry."""
-    entry = {
-        "time": timestamp(),
-        "agent": agent,
-        "action": action,
-        "status": status,
-        "details": _serialise_details(details),
-    }
-    get_logger(agent).info(json.dumps(entry, sort_keys=False))
+    """Write an immutable JSON log entry for an action."""
+
+    logger = get_logger(agent)
+    logger.info(
+        "event",
+        action=action,
+        status=status,
+        time=timestamp(),
+        details=_serialise_details(details),
+    )
 
 
 def capture_exception(agent: str, action: str, error: BaseException) -> None:
-    """Record details about an uncaught exception."""
-    log_event(
-        agent=agent,
-        action=action,
-        status="error",
-        details={"error": repr(error)},
-    )
+    """Record exception metadata in the telemetry stream."""
+
+    log_event(agent, action, "error", {"error": repr(error)})
+
+
+def iter_events() -> Any:
+    """Yield raw log entries from the event log."""
+
+    if not _EVENT_LOG.exists():
+        return
+    with _EVENT_LOG.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            if line.strip():
+                yield line
+
+
+__all__ = ["log_event", "capture_exception", "get_logger", "iter_events"]

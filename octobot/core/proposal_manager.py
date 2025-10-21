@@ -1,11 +1,12 @@
 """Proposal management for OctoBot."""
+
 from __future__ import annotations
 
 import json
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+from typing import Any, Dict, List, Sequence, cast
 
 from octobot.laws.validator import enforce
 from octobot.memory.history_logger import MemoryStore, ProposalRecord
@@ -29,13 +30,14 @@ class ProposalManager:
     def __init__(self, store: MemoryStore | None = None) -> None:
         self.store = store or MemoryStore()
 
-    def generate(self, topic: str, analysis: Dict[str, object]) -> Proposal:
+    def generate(self, topic: str, analysis: Dict[str, Any]) -> Proposal:
         proposal_id = self._make_identifier(topic)
         proposal_dir = proposals_root() / proposal_id
         enforce("filesystem_write", str(proposal_dir))
         proposal_dir.mkdir(parents=True, exist_ok=True)
-        summary_text = f"Improve {topic} to address {len(analysis.get('findings', []))} findings."
-        metadata = {
+        findings_source = cast(Sequence[Any], analysis.get("findings", []))
+        summary_text = f"Improve {topic} to address {len(findings_source)} findings."
+        metadata: Dict[str, Any] = {
             "id": proposal_id,
             "topic": topic,
             "status": "draft",
@@ -127,21 +129,23 @@ class ProposalManager:
         approval_time = timestamp()
         self.store.update_proposal_status(proposal_id, "approved", approval_time)
         self._update_metadata(proposal_id, {"status": "approved", "approval_date": approval_time})
-        log_event("governance", "approve", "approved", {"proposal": proposal_id, "approver": approver})
+        log_event(
+            "governance", "approve", "approved", {"proposal": proposal_id, "approver": approver}
+        )
 
     def _make_identifier(self, topic: str) -> str:
         today = datetime.utcnow().strftime("%Y-%m-%d")
         safe_topic = "_".join(part for part in topic.lower().split() if part)
         return f"{today}_{safe_topic}" if safe_topic else f"{today}_proposal"
 
-    def _compose_rationale(self, topic: str, analysis: Dict[str, object]) -> str:
+    def _compose_rationale(self, topic: str, analysis: Dict[str, Any]) -> str:
         lines = [
             f"# Rationale for {topic}",
             "",
             "## Context",
-            f"- Findings analysed: {len(analysis.get('findings', []))}",
-            f"- Average complexity: {analysis.get('complexity_average', 0):.2f}",
-            f"- TODO markers: {analysis.get('todos', 0)}",
+            f"- Findings analysed: {len(cast(Sequence[Any], analysis.get('findings', [])))}",
+            f"- Average complexity: {float(analysis.get('complexity_average', 0) or 0):.2f}",
+            f"- TODO markers: {int(analysis.get('todos', 0) or 0)}",
             "",
             "## Proposed Approach",
             "The system will refactor modules to reduce complexity and improve documentation.",
@@ -158,18 +162,24 @@ class ProposalManager:
             "+This placeholder file summarises intended changes.\n"
         )
 
-    def _compose_impact(self, metadata: Dict[str, object], analysis: Dict[str, object]) -> Dict[str, object]:
+    def _compose_impact(self, metadata: Dict[str, Any], analysis: Dict[str, Any]) -> Dict[str, Any]:
+        complexity_penalty = float(analysis.get("complexity_average", 0.0) or 0.0)
+        findings_source = cast(Sequence[Any], analysis.get("findings", []))
+        findings = len(findings_source)
+        roi = max(1.0, findings * 1.5) / max(1.0, complexity_penalty + 1)
         return {
             "proposal_id": metadata["id"],
-            "expected_coverage": analysis.get("coverage", 0.0),
-            "risk": "low" if analysis.get("complexity_average", 0) < 10 else "medium",
+            "purpose": metadata.get("summary", ""),
+            "expected_coverage": float(analysis.get("coverage", 0.0) or 0.0),
+            "risk": "low" if complexity_penalty < 10 else "medium",
+            "roi": round(roi, 2),
             "benefits": {
-                "complexity_reduction": max(0, len(analysis.get("findings", []))),
-                "documentation_improvement": analysis.get("missing_docstrings", 0),
+                "complexity_reduction": max(0, findings),
+                "documentation_improvement": int(analysis.get("missing_docstrings", 0) or 0),
             },
         }
 
-    def _update_metadata(self, proposal_id: str, updates: Dict[str, object]) -> None:
+    def _update_metadata(self, proposal_id: str, updates: Dict[str, Any]) -> None:
         proposal = self.load(proposal_id)
         if not proposal:
             return

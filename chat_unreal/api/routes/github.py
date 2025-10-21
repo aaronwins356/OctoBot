@@ -18,7 +18,9 @@ def github_search() -> Response:
 
     try:
         validators.validate_endpoint("github")
-        payload = validators.validate_payload(request.get_json(silent=True), required_fields=["keyword"])
+        payload = validators.validate_payload(
+            request.get_json(silent=True), required_fields=["keyword"]
+        )
     except validators.ValidationError as exc:
         return jsonify({"error": exc.message}), 400
 

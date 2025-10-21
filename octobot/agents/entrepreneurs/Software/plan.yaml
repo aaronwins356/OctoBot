@@ -1,0 +1,9 @@
+market: "Internal tooling for governance automation"
+revenue_streams:
+  - "Enterprise licensing"
+resources:
+  engineers: 4
+  designers: 1
+guardrails:
+  - "All releases gated by validator"
+  - "No auto-deployment"

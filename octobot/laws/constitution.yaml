@@ -2,3 +2,4 @@ rules:
   external_request: "No external requests except via connectors/unreal_bridge.py."
   filesystem_write: "No file writes outside /proposals or /ventures."
   code_merge: "No code merge without human approval flag."
+  agent_entry: "All agents must register with the validator before autonomous execution."

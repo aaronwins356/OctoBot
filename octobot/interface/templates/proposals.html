@@ -19,7 +19,7 @@
           <td class="px-4 py-3 font-mono text-xs">{{ proposal.proposal_id }}</td>
           <td class="px-4 py-3">{{ proposal.topic }}</td>
           <td class="px-4 py-3">{{ proposal.status }}</td>
-          <td class="px-4 py-3">{{ '%.1f' % proposal.coverage }}</td>
+          <td class="px-4 py-3">{{ '%.1f' % (proposal.coverage * 100) }}%</td>
           <td class="px-4 py-3 space-x-2">
             <a class="rounded bg-indigo-500 px-3 py-1 text-xs" href="/proposal/{{ proposal.proposal_id }}">Inspect</a>
             <button

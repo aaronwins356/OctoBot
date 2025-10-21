@@ -1,4 +1,5 @@
 """Environment validation script."""
+
 from __future__ import annotations
 
 import os

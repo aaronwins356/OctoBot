@@ -1,0 +1,25 @@
+name: Documentation Nightly
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  regenerate-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Poetry
+        run: |
+          python -m pip install --upgrade pip
+          pip install poetry==1.8.2
+      - name: Install dependencies
+        run: |
+          poetry install --no-interaction --no-ansi
+      - name: Rebuild documentation
+        run: |
+          poetry run python -m octobot.agents.engineers.documentor_agent

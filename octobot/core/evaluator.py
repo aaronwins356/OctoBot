@@ -1,4 +1,5 @@
 """Proposal evaluation heuristics."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -24,7 +25,7 @@ class Evaluator:
         evaluations: List[Evaluation] = []
         for proposal in proposals:
             summary = str(proposal.get("summary", ""))
-            coverage = float(proposal.get("coverage", 0.0))
+            coverage = _to_float(proposal.get("coverage", 0.0))
             complexity = 0.8 if "refactor" in summary.lower() else 0.6
             tests = min(1.0, coverage / 100.0)
             docs = 0.9 if "doc" in summary.lower() else 0.6
@@ -51,3 +52,14 @@ class Evaluator:
                 },
             )
         return evaluations
+
+
+def _to_float(value: object) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return 0.0
+    return 0.0
