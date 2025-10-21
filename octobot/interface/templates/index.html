@@ -1,8 +1,48 @@
-<html><body>
-<h1>OctoBot Proposals</h1>
-<ul>
-{% for p in proposals %}
-<li><a href="/proposal/{{p.id}}">{{p.title}}</a> — {{p.state}}</li>
-{% endfor %}
-</ul>
-</body></html>
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>OctoBot Proposals</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 2rem;
+        background-color: #fafafa;
+      }
+      h1 {
+        color: #3a3a3a;
+      }
+      ul {
+        list-style-type: none;
+        padding: 0;
+      }
+      li {
+        padding: 0.5rem 0;
+      }
+      a {
+        color: #007acc;
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      .empty {
+        color: #999;
+        margin-top: 2rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>OctoBot Proposals</h1>
+    {% if proposals %}
+      <ul>
+        {% for p in proposals %}
+          <li><a href="/proposal/{{ p.id }}">{{ p.title }}</a> — {{ p.state }}</li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="empty">No proposals yet. The bot is ready for your first idea.</p>
+    {% endif %}
+  </body>
+</html>
+

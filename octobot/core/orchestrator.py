@@ -1,23 +1,48 @@
 import asyncio
-import structlog
-from octobot.core.events import EventBus
-from octobot.core.proposals import ProposalManager
+from structlog import get_logger
 
-log = structlog.get_logger()
+logger = get_logger()
 
-async def orchestrate():
-    bus = EventBus()
-    proposals = ProposalManager()
 
-    async def on_approved(proposal_id):
-        log.info("orchestrator.applied", proposal_id=proposal_id)
+class Orchestrator:
+    """
+    The Orchestrator is the central coordinator for OctoBot.
+    It listens to proposal and event updates, and manages
+    evaluation and execution cycles.
+    """
 
-    bus.subscribe("proposal_approved", on_approved)
+    def __init__(self, event_bus, proposal_manager):
+        self.event_bus = event_bus
+        self.proposal_manager = proposal_manager
+        self.running = False
 
-    log.info("orchestrator.ready", count=len(proposals.proposals))
-    while True:
-        event, data = await bus.queue.get()
-        log.info("orchestrator.event", event=event, data=data)
+    async def run_forever(self):
+        """Run the main orchestration loop."""
+        self.running = True
+        logger.info("orchestrator.started")
 
-if __name__ == "__main__":
-    asyncio.run(orchestrate())
+        # Subscribe to proposal events
+        self.event_bus.subscribe("proposal_created", self.on_proposal_created)
+        self.event_bus.subscribe("proposal_approved", self.on_proposal_approved)
+        self.event_bus.subscribe("proposal_rejected", self.on_proposal_rejected)
+
+        while self.running:
+            await asyncio.sleep(5)
+            logger.info("orchestrator.heartbeat", status="alive")
+
+    async def stop(self):
+        """Gracefully stop orchestration."""
+        self.running = False
+        logger.info("orchestrator.stopped")
+
+    # --- Event Handlers ---
+
+    async def on_proposal_created(self, proposal):
+        logger.info("proposal.created", proposal=proposal)
+        await self.proposal_manager.evaluate(proposal)
+
+    async def on_proposal_approved(self, proposal):
+        logger.info("proposal.approved", proposal=proposal)
+
+    async def on_proposal_rejected(self, proposal):
+        logger.info("proposal.rejected", proposal=proposal)
