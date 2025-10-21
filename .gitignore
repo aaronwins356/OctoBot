@@ -1,0 +1,15 @@
+# Virtual environments
+venv/
+
+# Local data and models
+data/
+logs/
+models/
+workspace/
+
+# Python caches
+__pycache__/
+*.pyc
+
+# Test cache
+.pytest_cache/

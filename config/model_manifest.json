@@ -1,0 +1,11 @@
+{
+  "models": [
+    {
+      "name": "tiny-gpt2",
+      "provider": "transformers",
+      "model_id": "sshleifer/tiny-gpt2",
+      "capabilities": ["generate"],
+      "default": true
+    }
+  ]
+}
