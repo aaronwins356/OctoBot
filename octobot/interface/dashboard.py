@@ -1,12 +1,10 @@
 # octobot/interface/dashboard.py
 
-from fastapi import FastAPI, Request, Form, Depends, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi import FastAPI, Request, Depends, HTTPException
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.cors import CORSMiddleware
 from pathlib import Path
-import json
-import os
 
 from octobot.security.auth_shared import verify_token
 from octobot.core.proposals import ProposalManager
@@ -41,8 +39,9 @@ def create_app() -> FastAPI:
         """List proposals and their current states."""
         proposals = app.state.proposal_manager.list_all()
         return templates.TemplateResponse(
+            request,
             "index.html",
-            {"request": request, "proposals": proposals},
+            {"proposals": proposals},
         )
 
     @app.get("/proposal/{proposal_id}", response_class=HTMLResponse, response_model=None)
@@ -53,8 +52,9 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail="Proposal not found")
 
         return templates.TemplateResponse(
+            request,
             "proposal.html",
-            {"request": request, "proposal": proposal},
+            {"proposal": proposal},
         )
 
     @app.post("/approve/{proposal_id}")
@@ -77,7 +77,7 @@ def create_app() -> FastAPI:
 
         try:
             pm.mark_approved(proposal_id, approver="dashboard", token=token)
-            ev.emit("proposal_approved", proposal_id=proposal_id)
+            await ev.emit("proposal_approved", proposal_id=proposal_id)
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
@@ -96,7 +96,7 @@ def create_app() -> FastAPI:
             raise HTTPException(status_code=404, detail="Proposal not found")
 
         pm.mark_rejected(proposal_id, reason="Manual rejection from dashboard")
-        ev.emit("proposal_rejected", proposal_id=proposal_id)
+        await ev.emit("proposal_rejected", proposal_id=proposal_id)
 
         return JSONResponse({"status": "rejected", "proposal_id": proposal_id})
 
