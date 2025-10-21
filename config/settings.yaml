@@ -5,7 +5,7 @@ runtime:
   logs_dir: "logs"
   reflections_dir: "logs/reflections"
   sandbox_root: "sandbox/agents"
-  proposal_dir: "sandbox/proposals"
+  proposal_dir: "scriptSuggestions"
   db_path: "memory/data/state.db"
   ledger_path: "memory/data/ledger.db"
   max_runtime_seconds: 30
@@ -18,7 +18,7 @@ network:
 security:
   allowed_write_paths:
     - "sandbox/agents"
-    - "sandbox/proposals"
+    - "scriptSuggestions"
   disallowed_imports:
     - "os.system"
     - "subprocess"
