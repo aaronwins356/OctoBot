@@ -1,45 +1,81 @@
-# Architecture Overview
+# OctoBot Architectural Overview
 
-Grounded Lifestyle is organised as a civic metaphor:
+OctoBot orchestrates self-inspection cycles consisting of analysis, proposal generation, evaluation, human review, and
+curated merging. This document outlines the participating subsystems and the flow of data between them.
 
-- **Laws** define non-negotiable rules such as `laws/constitution.yaml` and `laws/economy_rules.yaml`.
-- **Government** orchestrates ideation, storage, and presentation via the orchestrator, proposal manager, and presenter.
-- **Entrepreneurs** create venture blueprints with specialised agents (venture, optimizer, marketer, writer).
-- **Website** hosts the public portfolio for https://groundedlifestyle.org.
-- **Interface** offers human tooling (CLI + dashboard) to approve and publish work.
-- **Memory** stores analytics hints and run histories for iterative learning.
+## 1. Government Layer
 
-## Flow of a Venture
-1. The venture agent gathers metrics from `memory/analytics.py` and proposes an idea.
-2. `government/proposal_manager.py` serialises the proposal into `scriptSuggestions/<proposal>/proposal.yaml`.
-3. Humans review the artefacts using `python -m interface.cli show <id>` or the Flask dashboard.
-4. Upon approval, `government/presenter.py` renders updated HTML for the public site.
-5. Deployment is manual via `website/deploy.py` to maintain explicit human oversight.
+The government package coordinates the lifecycle of improvement initiatives.
 
-## Safety Features
-- All proposals require `require_human_approval: true`.
-- `laws/economy_rules.yaml` restricts budgets, domains, and automation scope.
-- Agents operate in sandbox directories defined by `config/settings.yaml`.
-- The CLI exposes only supervised commands: generate venture, list/show/approve proposals, publish site.
+- **orchestrator.py** — Schedules and executes improvement cycles. It invokes the analyzer, proposal manager, evaluator, and
+  reporter to assemble contextual data for human review.
+- **proposal_manager.py** — Persists proposals on disk in YAML + Markdown bundles. Each proposal is timestamped and backed by
+  rationale metadata.
+- **evaluator.py** — Scores proposals according to cyclomatic complexity impact, test coverage delta, documentation coverage,
+  and qualitative risk factors.
+- **compiler.py** — Consolidates evaluated proposals into dashboard-friendly payloads and exported reports.
+- **updater.py** — Applies approved proposals by invoking GitPython. The updater refuses to run unless an approval record is
+  present in the database.
 
-## Directory Highlights
-```
-Self-Coding-Bot/
-├── government/
-│   ├── presenter.py        # Builds static portfolio pages
-│   └── proposal_manager.py # Loads & persists proposal manifests
-├── entrepreneurs/
-│   ├── venture_agent.py    # Produces new venture ideas
-│   ├── optimizer_agent.py  # Technical recommendations
-│   └── marketer_agent.py   # SEO & outreach playbooks
-├── website/
-│   ├── app.py              # Flask app for public portfolio
-│   └── templates/          # base.html, home.html, venture_page.html
-├── scriptSuggestions/      # Proposal folders awaiting review
-├── interface/
-│   ├── cli.py              # `brain` supervision commands
-│   └── dashboard.py        # Local Flask review UI
-└── docs/                   # Guides for operators
-```
+## 2. Engineering Agents
 
-This modular structure ensures the motto “Propose, never presume” remains intact: every idea is surfaced with context, aesthetics, and ethical guardrails, while humans retain the final say.
+The engineers package contains specialized workers focused on different aspects of the repository.
+
+- **analyzer_agent.py** — Walks the repository, constructs ASTs for Python files, and surfaces hotspots such as repeated logic,
+  high-complexity functions, missing docstrings, and unused imports. Results are saved as JSON.
+- **code_writer_agent.py** — Builds rewrite candidates from analyzer findings. For offline operation it emits deterministic
+  suggestions seeded by heuristics and stores them under `proposals/<date_topic>/code/`.
+- **tester_agent.py** — Runs the project's test suites and captures success/failure metrics for use by the evaluator.
+- **documentor_agent.py** — Generates and maintains Markdown summaries of proposals and code modules.
+
+## 3. Governance and Ethics
+
+The `laws/` directory contains YAML manifest files describing OctoBot's constitutional rules and ethical principles.
+`validator.py` ensures that every agent invocation respects these laws, preventing network access, unapproved merges, and
+missing rationales.
+
+## 4. Connectors
+
+External communication is isolated to the `connectors/` package.
+
+- **unreal_bridge.py** — A controlled outbound interface that simulates network calls while enforcing restrictions.
+- **web_crawler.py** — Example connector that would consume the bridge to gather documentation in an auditable manner.
+
+## 5. Interfaces
+
+OctoBot exposes two primary human-facing surfaces:
+
+- **interface/cli.py** — A Click-based command line entry point providing commands to analyze, propose, evaluate, launch the
+  dashboard, approve proposals, and inspect logs.
+- **interface/dashboard.py** — A Flask application with pages for the system overview, proposals, history, and laws.
+
+## 6. Memory Layer
+
+The `memory/` package manages persistence using SQLite.
+
+- **memory.db** — Created automatically on first use.
+- **reporter.py** — Aggregates metrics from analyzer runs and evaluator scores for dashboard display.
+- **history_logger.py** — Provides a typed interface for inserting and querying historical events and approvals.
+
+## 7. Data Flow Summary
+
+1. `orchestrator.run_cycle()` triggers the analyzer to produce a repository report.
+2. `proposal_manager.generate()` converts the report into structured proposals saved on disk.
+3. `evaluator.score()` grades each proposal, storing metrics via the reporter.
+4. Humans inspect results through the dashboard or CLI.
+5. Upon approval, `updater.merge()` validates the laws and commits changes using GitPython.
+
+## 8. Testing Strategy
+
+Automated tests cover:
+
+- Analyzer correctness for detecting missing docstrings and unused imports.
+- Proposal formatting to guarantee YAML schema compliance.
+- Dashboard health checks ensuring Flask routes render successfully.
+- Validator enforcement confirming that laws are parsed and applied to agent actions.
+
+## 9. Extending OctoBot
+
+Developers can add new agents or connectors by registering them with the validator and updating the CLI. Additional metrics can
+be logged by extending `memory/reporter.py` with new aggregation routines.
+

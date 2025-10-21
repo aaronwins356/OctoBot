@@ -1,9 +1,0 @@
-allow_real_transactions: false
-allow_affiliate_apis: true
-allow_trading: false
-require_human_approval: true
-max_budget_usd: 50
-disallowed_domains:
-  - gambling
-  - nsfw
-  - political

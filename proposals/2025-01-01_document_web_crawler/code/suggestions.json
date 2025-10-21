@@ -1,0 +1,7 @@
+[
+  {
+    "file": "connectors/web_crawler.py",
+    "issue": "documentation",
+    "recommendation": "Expand module-level docstring with usage instructions and governance notes."
+  }
+]

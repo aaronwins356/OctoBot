@@ -1,108 +1,74 @@
-"""AST-based validation routines for entrepreneur agents and proposals."""
+"""Law and ethics validation for OctoBot agents."""
 from __future__ import annotations
 
-import ast
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List
 
-from utils.logger import get_logger
-from utils.settings import SETTINGS
-
-LOGGER = get_logger(__name__)
+from utils_yaml import safe_load
 
 
 @dataclass
-class ValidationResult:
-    """Structure describing the outcome of a validation pass."""
+class LawBook:
+    rules: List[str]
+    principles: List[str]
 
-    errors: List[str]
+
+class LawViolation(Exception):
+    """Raised when an operation violates a constitutional rule."""
+
+
+class LawValidator:
+    """Loads constitutional rules and enforces them against agent actions."""
+
+    def __init__(self, constitution_path: Path | None = None, ethics_path: Path | None = None) -> None:
+        base = Path(__file__).resolve().parent
+        self.constitution_path = constitution_path or base / "constitution.yaml"
+        self.ethics_path = ethics_path or base / "ethics.yaml"
+        self._law_book: LawBook | None = None
 
     @property
-    def ok(self) -> bool:
-        return not self.errors
+    def law_book(self) -> LawBook:
+        if self._law_book is None:
+            with self.constitution_path.open("r", encoding="utf-8") as fh:
+                constitution = safe_load(fh.read()) or {}
+            with self.ethics_path.open("r", encoding="utf-8") as fh:
+                ethics = safe_load(fh.read()) or {}
+            self._law_book = LawBook(
+                rules=list(constitution.get("rules", [])),
+                principles=list(ethics.get("principles", [])),
+            )
+        return self._law_book
+
+    def ensure(self, conditions: Iterable[str]) -> None:
+        """Check conditions against the law book.
+
+        Parameters
+        ----------
+        conditions:
+            An iterable of textual statements that describe facts about the
+            current operation. If any statement contradicts a rule the
+            validator raises :class:`LawViolation`.
+        """
+
+        contradictions: list[str] = []
+        facts = set(condition.lower() for condition in conditions)
+        for rule in self.law_book.rules:
+            lowered = rule.lower()
+            if "without human approval" in lowered and "human approval" not in facts:
+                contradictions.append(rule)
+            if "no network requests" in lowered and "network request" in facts:
+                contradictions.append(rule)
+            if "log a rationale" in lowered and "rationale logged" not in facts:
+                contradictions.append(rule)
+        if contradictions:
+            raise LawViolation(
+                "Operation violates constitutional rule(s): " + ", ".join(contradictions)
+            )
+
+    def describe(self) -> str:
+        book = self.law_book
+        return "Rules: " + ", ".join(book.rules) + " | Principles: " + ", ".join(book.principles)
 
 
-class _LawVisitor(ast.NodeVisitor):
-    def __init__(self, constitution: dict):
-        self.constitution = constitution
-        self.errors: List[str] = []
-        self.forbidden_calls = set(constitution.get("forbidden_calls", [])) | set(
-            SETTINGS.security.forbidden_calls
-        )
-        self.forbidden_imports = set(constitution.get("forbidden_imports", [])) | set(
-            SETTINGS.security.disallowed_imports
-        )
-
-    def _record(self, message: str) -> None:
-        LOGGER.warning("Validation issue: %s", message)
-        self.errors.append(message)
-
-    def visit_Import(self, node: ast.Import) -> None:  # pragma: no cover - simple
-        for alias in node.names:
-            name = alias.name.split(".")[0]
-            if name in self.forbidden_imports:
-                self._record(f"Forbidden import: {name}")
-        self.generic_visit(node)
-
-    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
-        module = (node.module or "").split(".")[0]
-        if module in self.forbidden_imports:
-            self._record(f"Forbidden import from: {module}")
-        self.generic_visit(node)
-
-    def visit_Call(self, node: ast.Call) -> None:
-        if isinstance(node.func, ast.Attribute):
-            qualname = f"{ast.unparse(node.func.value)}.{node.func.attr}"  # type: ignore[arg-type]
-        elif isinstance(node.func, ast.Name):
-            qualname = node.func.id
-        else:
-            qualname = ast.unparse(node.func)  # type: ignore[arg-type]
-
-        if qualname in self.forbidden_calls:
-            self._record(f"Forbidden call detected: {qualname}")
-        self.generic_visit(node)
-
-    def visit_Exec(self, node: ast.Exec) -> None:  # pragma: no cover - Python <3
-        self._record("exec statements are forbidden")
-
-    def visit_Global(self, node: ast.Global) -> None:
-        for name in node.names:
-            if name.upper().endswith("TOKEN"):
-                self._record("Global secret token variables are not allowed")
-        self.generic_visit(node)
-
-
-def load_source_ast(path: Path) -> ast.AST:
-    if not path.exists():
-        raise FileNotFoundError(path)
-    with path.open("r", encoding="utf-8") as fh:
-        source = fh.read()
-    return ast.parse(source, filename=str(path))
-
-
-def analyze_source(tree: ast.AST, constitution: dict) -> None:
-    visitor = _LawVisitor(constitution)
-    visitor.visit(tree)
-    if visitor.errors:
-        raise ValueError("; ".join(visitor.errors))
-
-
-def check_proposal(paths: Iterable[Path], constitution: dict | None = None) -> ValidationResult:
-    constitution = constitution or {}
-    errors: List[str] = []
-    for path in paths:
-        try:
-            tree = load_source_ast(path)
-            analyze_source(tree, constitution)
-        except Exception as exc:  # broad capture for reporting
-            errors.append(f"{path}: {exc}")
-    return ValidationResult(errors=errors)
-
-
-__all__ = [
-    "ValidationResult",
-    "check_proposal",
-    "load_source_ast",
-    "analyze_source",
-]
+DEFAULT_VALIDATOR = LawValidator()

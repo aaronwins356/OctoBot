@@ -1,104 +1,114 @@
-"""Command-line utilities for supervising venture proposals."""
+"""Command line interface for OctoBot."""
 from __future__ import annotations
 
-import argparse
-from pathlib import Path
+import json
+from typing import Optional
 
-from entrepreneurs.venture_agent import VentureAgent
-from government.presenter import build_portfolio
-from government.proposal_manager import (
-    load_proposals,
-    mark_proposal_status,
-)
-from utils.logger import get_logger
-from utils.settings import SETTINGS
+import click
+from rich.console import Console
+from rich.table import Table
 
-LOGGER = get_logger(__name__)
+from engineers.analyzer_agent import AnalyzerAgent
+from government.evaluator import Evaluator
+from government.proposal_manager import ProposalManager
+from interface.dashboard import create_app
+from laws.validator import DEFAULT_VALIDATOR
+from memory.history_logger import HistoryLogger
 
-
-def _sandbox_path() -> Path:
-    root = Path(SETTINGS.runtime.sandbox_root)
-    target = root / "venture_agent"
-    target.mkdir(parents=True, exist_ok=True)
-    return target
+console = Console()
 
 
-def generate_venture() -> None:
-    LOGGER.info("Triggering venture agent to draft a new proposal")
-    agent = VentureAgent("venture_agent", str(_sandbox_path()))
-    agent.setup()
-    result = agent.run({})
-    LOGGER.info("Generated proposal at %s", result["proposal_manifest"])
-    print(result["proposal_manifest"])
+@click.group()
+def cli() -> None:
+    """OctoBot supervision interface."""
 
 
-def list_proposals() -> None:
-    proposals = load_proposals()
+@cli.command()
+def analyze() -> None:
+    """Scan the repository and produce an analyzer report."""
+    DEFAULT_VALIDATOR.ensure(["human approval", "rationale logged"])
+    report = AnalyzerAgent().scan_repo()
+    console.print("Analyzer report saved to reports/analyzer_report.json")
+    console.print(json.dumps(report, indent=2))
+
+
+@cli.command()
+def propose() -> None:
+    """Generate proposals based on the latest analyzer report."""
+    DEFAULT_VALIDATOR.ensure(["human approval", "rationale logged"])
+    analyzer = AnalyzerAgent()
+    report = analyzer.scan_repo()
+    proposals = ProposalManager().generate(report)
+    table = Table(title="Generated Proposals")
+    table.add_column("ID")
+    table.add_column("Impact")
+    table.add_column("Risk")
+    table.add_column("Summary")
     for proposal in proposals:
-        status = proposal.status
-        print(f"{proposal.storage_path.name if proposal.storage_path else proposal.proposal_id}: {status}")
+        table.add_row(proposal.proposal_id, proposal.impact, proposal.risk, proposal.summary)
+    console.print(table)
 
 
-def show_proposal(identifier: str) -> None:
-    for proposal in load_proposals():
-        folder_name = proposal.storage_path.name if proposal.storage_path else proposal.proposal_id
-        if folder_name == identifier or proposal.proposal_id == identifier:
-            manifest = proposal.storage_path / "proposal.yaml" if proposal.storage_path else None
-            if manifest and manifest.exists():
-                print(manifest.read_text(encoding="utf-8"))
-                return
-    raise FileNotFoundError(f"Proposal {identifier} not found")
+@cli.command()
+def evaluate() -> None:
+    """Evaluate current proposals and display scores."""
+    DEFAULT_VALIDATOR.ensure(["human approval", "rationale logged"])
+    manager = ProposalManager()
+    proposals = manager.list_proposals()
+    evaluations = Evaluator().score([proposal.__dict__ | {"id": proposal.proposal_id} for proposal in proposals])
+    table = Table(title="Evaluation Scores")
+    table.add_column("Proposal")
+    table.add_column("Complexity")
+    table.add_column("Tests")
+    table.add_column("Docs")
+    table.add_column("Risk")
+    for evaluation in evaluations:
+        table.add_row(
+            evaluation.proposal_id,
+            f"{evaluation.complexity:.2f}",
+            f"{evaluation.tests:.2f}",
+            f"{evaluation.docs:.2f}",
+            f"{evaluation.risk:.2f}",
+        )
+    console.print(table)
 
 
-def approve_proposal(identifier: str) -> None:
-    for proposal in load_proposals():
-        folder_name = proposal.storage_path.name if proposal.storage_path else proposal.proposal_id
-        if folder_name == identifier or proposal.proposal_id == identifier:
-            mark_proposal_status(proposal, "approved")
-            LOGGER.info("Proposal %s approved", identifier)
-            print(f"Approved {identifier}")
-            return
-    raise FileNotFoundError(f"Proposal {identifier} not found")
+@cli.command()
+@click.option("--host", default="0.0.0.0", help="Host address")
+@click.option("--port", default=5000, type=int, help="Port number")
+def serve(host: str, port: int) -> None:
+    """Launch the OctoBot dashboard."""
+    DEFAULT_VALIDATOR.ensure(["human approval", "rationale logged"])
+    app = create_app()
+    app.run(host=host, port=port)
 
 
-def publish_site() -> None:
-    created = build_portfolio()
-    LOGGER.info("Site generated with %d files", len(created))
-    for path in created:
-        print(path)
+@cli.command()
+@click.argument("proposal_id")
+@click.option("--approver", default="cli", help="Name of the approver")
+def approve(proposal_id: str, approver: str) -> None:
+    """Record approval for a proposal."""
+    DEFAULT_VALIDATOR.ensure(["human approval", "rationale logged"])
+    HistoryLogger().approve(proposal_id, approver)
+    console.print(f"Proposal {proposal_id} approved by {approver}")
 
 
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Grounded Lifestyle supervision CLI")
-    sub = parser.add_subparsers(dest="command", required=True)
-
-    sub.add_parser("generate-venture")
-    sub.add_parser("list-proposals")
-
-    show_parser = sub.add_parser("show")
-    show_parser.add_argument("identifier")
-
-    approve_parser = sub.add_parser("approve")
-    approve_parser.add_argument("identifier")
-
-    sub.add_parser("publish-site")
-
-    return parser.parse_args()
+@cli.command(name="log")
+def show_log() -> None:
+    """Display recent history events."""
+    DEFAULT_VALIDATOR.ensure(["human approval", "rationale logged"])
+    events = HistoryLogger().list_events()
+    table = Table(title="History Events")
+    table.add_column("Timestamp")
+    table.add_column("Event")
+    for event, timestamp in events:
+        table.add_row(timestamp, event)
+    console.print(table)
 
 
 def main() -> None:
-    args = _parse_args()
-    if args.command == "generate-venture":
-        generate_venture()
-    elif args.command == "list-proposals":
-        list_proposals()
-    elif args.command == "show":
-        show_proposal(args.identifier)
-    elif args.command == "approve":
-        approve_proposal(args.identifier)
-    elif args.command == "publish-site":
-        publish_site()
+    cli()
 
 
-if __name__ == "__main__":  # pragma: no cover - CLI entry
+if __name__ == "__main__":
     main()

@@ -1,70 +1,53 @@
-# Grounded Lifestyle Venture Studio
+# OctoBot: The Self-Improvement Framework
 
-Grounded Lifestyle is a human-supervised AI venture studio focused on ethically generating, evaluating, and presenting digital business ideas. The motto is **“Propose, never presume.”** Every artefact is drafted locally and requires explicit human approval before execution or deployment.
+OctoBot is a modular research framework that learns to analyze its own codebase, surface improvement proposals, and queue
+changes for human approval. The goal is to demonstrate scalable self-analysis and transparent reasoning for AI software
+projects without removing humans from the loop.
 
-## Table of Contents
-- [System Purpose](#system-purpose)
-- [Architecture Overview](#architecture-overview)
-- [Safety Principles](#safety-principles)
-- [Quick Start](#quick-start)
-- [Supervision Commands](#supervision-commands)
-- [Deployment Guide](#deployment-guide)
-- [Documentation](#documentation)
+## Key Features
+- **Human Oversight:** Every proposed change is queued for review and cannot be merged without explicit approval from the
+  dashboard.
+- **Transparency:** Analyzer reports, generated proposals, risk assessments, and decisions are recorded in natural language
+  and stored for auditing.
+- **Reproducibility:** All merges are performed through Git commits logged by the updater module after approval.
+- **Ethics Guardrails:** YAML constitutions constrain network access, mandate rationale logging, and ensure proposals serve
+  human benefit.
 
-## System Purpose
-The studio explores revenue opportunities such as wellness content sites, affiliate programs, and automation tools while respecting strict ethical and budgetary boundaries. Ideas are expressed as YAML proposals accompanied by explanatory text and optional code drafts.
+## Repository Layout
+```
+government/           # Orchestration, proposal management, scoring, merging
+engineers/            # Specialized agents for analysis, code drafting, testing, and documentation
+laws/                 # Constitutional documents and validator enforcing compliance
+connectors/           # Interfaces to external systems (stubbed for offline demonstration)
+interface/            # Human-facing CLI and Flask dashboard
+memory/               # SQLite persistence, metrics, and logging utilities
+proposals/            # Generated proposal packages awaiting review
+scripts/              # Helper scripts for bootstrapping and maintenance
+docs/                 # Architectural documentation and user guides
+tests/                # Automated regression tests
+```
 
-## Architecture Overview
-- `government/` — Orchestrator, proposal manager, presenter, and supporting utilities.
-- `entrepreneurs/` — Specialised business agents (venture ideation, optimisation, marketing support).
-- `laws/` — Constitutional rules and `economy_rules.yaml` describing financial constraints.
-- `website/` — Flask application and templates for https://groundedlifestyle.org.
-- `scriptSuggestions/` — Venture proposals awaiting human review.
-- `interface/` — CLI (`python -m interface.cli`) and optional dashboard for approvals.
-- `memory/` — Analytics scaffolding to guide future proposals.
-
-See `docs/ARCHITECTURE.md` for a detailed walkthrough.
+## Getting Started
+1. Create a virtual environment and install dependencies:
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   ```
+2. Initialize the database and generate example proposals:
+   ```bash
+   python -m interface.cli analyze
+   python -m interface.cli propose
+   ```
+3. Launch the dashboard to inspect proposals, laws, and history:
+   ```bash
+   python -m interface.cli serve
+   ```
+4. Approve a proposal through the dashboard or CLI, then apply it with the updater.
 
 ## Safety Principles
-1. **Explicit Approval:** `laws/economy_rules.yaml` enforces `require_human_approval: true` on all proposals.
-2. **Budget Guardrails:** Ventures must operate within a $50 budget ceiling and avoid disallowed domains (gambling, NSFW, political).
-3. **No Auto-Deployment:** Static sites are built locally via `government/presenter.py` and must be uploaded manually.
-4. **Sandboxed Agents:** Each agent runs in a dedicated sandbox and is statically validated before execution.
-5. **Transparent Outputs:** Every proposal includes an ethical statement, projected costs, and expected revenue range.
+- **No Unreviewed Execution:** `laws/constitution.yaml` forbids automatic merges without human approval.
+- **Network Isolation:** All outbound requests must pass through `connectors/unreal_bridge.py`.
+- **Explainability:** Each proposal includes machine-generated rationale logged to the history database.
 
-## Quick Start
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
-```
-
-Optional: copy `.env.example` to `.env` and set `OFFLINE_MODE=true` for fully local operation.
-
-## Supervision Commands
-Use the CLI to guide the venture lifecycle:
-```bash
-python -m interface.cli generate-venture   # Draft a new proposal
-python -m interface.cli list-proposals     # View proposal directories
-python -m interface.cli show <id>          # Display proposal.yaml
-python -m interface.cli approve <id>       # Mark proposal as approved
-python -m interface.cli publish-site       # Render updated portfolio HTML
-```
-
-A lightweight review dashboard is also available via `python -m interface.dashboard` (Flask app running on localhost).
-
-## Deployment Guide
-1. Approve at least one proposal.
-2. Run `python -m interface.cli publish-site` to render HTML into `website/public/`.
-3. Upload the generated assets to Hostinger, Netlify, or another hosting provider.
-4. Update DNS for `groundedlifestyle.org` if necessary.
-
-Deployment helpers in `website/deploy.py` intentionally stop short of pushing files to keep humans in control.
-
-## Documentation
-- `docs/VENTURE_GUIDE.md` — Detailed venture lifecycle instructions.
-- `docs/ARCHITECTURE.md` — Expanded architectural overview.
-- `docs/HUMAN_APPROVAL.md` — Human approval checklist.
-
-For further experiments, edit `memory/analytics.py` with real metrics or extend the entrepreneur agents with new revenue hypotheses.
+Refer to `docs/ARCHITECTURE.md` for a comprehensive overview of the subsystem interactions and workflows.
