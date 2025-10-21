@@ -1,97 +1,116 @@
-"""FastAPI dashboard exposing proposal lifecycle data."""
+# octobot/interface/dashboard.py
 
-from __future__ import annotations
-
-import json
-from pathlib import Path
-from typing import Dict, List
-
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import FastAPI, Request, Form, Depends, HTTPException
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.cors import CORSMiddleware
+from pathlib import Path
+import json
+import os
 
-from octobot.core.orchestrator import Orchestrator
-from octobot.core.proposal_manager import ProposalManager
-from octobot.laws.validator import validate_proposal
-from octobot.memory.reporter import Reporter
+from octobot.security.auth_shared import verify_token
+from octobot.core.proposals import ProposalManager
+from octobot.core.events import EventBus
 
-_TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
-
+templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 def create_app() -> FastAPI:
-    manager = ProposalManager()
-    orchestrator = Orchestrator(proposals=manager)
-    reporter = Reporter(manager.store)
-    app = FastAPI(title="OctoBot Dashboard", docs_url=None, redoc_url=None)
+    app = FastAPI(
+        title="OctoBot Governance Dashboard",
+        description="Human-facing dashboard for proposal validation and approval.",
+        version="1.0.0",
+    )
 
-    @app.get("/", response_class=HTMLResponse)
-    async def index(request: Request) -> HTMLResponse:
-        return await proposals(request)
+    # CORS support for local debugging or frontends
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
-    @app.get("/proposals", response_class=HTMLResponse)
-    async def proposals(request: Request) -> HTMLResponse:
-        records = manager.list_proposals()
-        return _TEMPLATES.TemplateResponse(
-            "proposals.html",
-            {"request": request, "proposals": records},
+    # Shared state
+    app.state.proposal_manager = ProposalManager()
+    app.state.event_bus = EventBus()
+
+    # --- ROUTES -------------------------------------------------------------
+
+    @app.get("/", response_class=HTMLResponse, response_model=None)
+    async def index(request: Request):
+        """List proposals and their current states."""
+        proposals = app.state.proposal_manager.list_all()
+        return templates.TemplateResponse(
+            "index.html",
+            {"request": request, "proposals": proposals},
         )
 
-    @app.get("/proposal/{proposal_id}", response_class=HTMLResponse)
-    async def proposal_detail(
-        request: Request, proposal_id: str
-    ) -> HTMLResponse | RedirectResponse:
-        proposal = manager.load(proposal_id)
+    @app.get("/proposal/{proposal_id}", response_class=HTMLResponse, response_model=None)
+    async def view_proposal(request: Request, proposal_id: str):
+        """Show proposal detail."""
+        proposal = app.state.proposal_manager.get(proposal_id)
         if not proposal:
-            return RedirectResponse(url="/proposals", status_code=302)
-        diff_path = proposal.path / "diff.patch"
-        diff_text = (
-            diff_path.read_text(encoding="utf-8") if diff_path.exists() else "Diff not available."
-        )
-        impact_path = proposal.path / "impact.json"
-        impact = json.loads(impact_path.read_text(encoding="utf-8")) if impact_path.exists() else {}
-        validation = validate_proposal(proposal)
-        return _TEMPLATES.TemplateResponse(
-            "proposal_detail.html",
-            {
-                "request": request,
-                "proposal": proposal,
-                "impact": impact,
-                "diff": diff_text,
-                "validation": validation,
-            },
+            raise HTTPException(status_code=404, detail="Proposal not found")
+
+        return templates.TemplateResponse(
+            "proposal.html",
+            {"request": request, "proposal": proposal},
         )
 
-    @app.post("/approve/{proposal_id}", response_class=HTMLResponse)
-    async def approve(proposal_id: str) -> HTMLResponse:
-        commit = await orchestrator.async_approve_proposal(proposal_id, "dashboard")
-        if not commit:
-            message = f"Proposal {proposal_id} not applied. Check validation and test logs."
-        else:
-            message = f"Proposal {proposal_id} applied with commit {commit}."
-        return HTMLResponse(f"<p>{message}</p>")
+    @app.post("/approve/{proposal_id}")
+    async def approve_proposal(
+        proposal_id: str,
+        token: str = Depends(verify_token),
+    ):
+        """Approve a proposal if validation passes and auth is OK."""
+        pm = app.state.proposal_manager
+        ev = app.state.event_bus
 
-    @app.get("/metrics", response_class=HTMLResponse)
-    async def metrics(request: Request) -> HTMLResponse:
-        keys: List[str] = ["coverage", "files_scanned", "todos", "missing_docstrings"]
-        data: Dict[str, List[Dict[str, str]]] = {}
-        for key in keys:
-            series = reporter.store.fetch_metrics(key, limit=1)
-            if key == "coverage":
-                for item in series:
-                    try:
-                        value = float(item.get("value", 0.0))
-                    except (TypeError, ValueError):
-                        value = 0.0
-                    scaled = round(value * 100.0, 2)
-                    item["value"] = f"{scaled:.2f}"
-            data[key] = series
-        summary = reporter.generate_weekly_summary()
-        return _TEMPLATES.TemplateResponse(
-            "metrics.html",
-            {"request": request, "metrics": data, "summary": summary},
-        )
+        proposal = pm.get(proposal_id)
+        if not proposal:
+            raise HTTPException(status_code=404, detail="Proposal not found")
+
+        # Ensure coverage meets constitutional threshold
+        coverage = float(proposal.metadata.get("coverage", 0))
+        if coverage < 0.9:
+            raise HTTPException(status_code=400, detail="Coverage below 90%")
+
+        try:
+            pm.mark_approved(proposal_id, approver="dashboard", token=token)
+            ev.emit("proposal_approved", proposal_id=proposal_id)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+        return JSONResponse({"status": "approved", "proposal_id": proposal_id})
+
+    @app.post("/reject/{proposal_id}")
+    async def reject_proposal(
+        proposal_id: str,
+        token: str = Depends(verify_token),
+    ):
+        """Reject a proposal."""
+        pm = app.state.proposal_manager
+        ev = app.state.event_bus
+
+        if not pm.exists(proposal_id):
+            raise HTTPException(status_code=404, detail="Proposal not found")
+
+        pm.mark_rejected(proposal_id, reason="Manual rejection from dashboard")
+        ev.emit("proposal_rejected", proposal_id=proposal_id)
+
+        return JSONResponse({"status": "rejected", "proposal_id": proposal_id})
+
+    @app.get("/health", response_model=None)
+    async def health_check():
+        return {"status": "ok"}
 
     return app
 
 
-__all__ = ["create_app"]
+# --- Instantiate app for uvicorn --------------------------------------------
+
+app = create_app()
+
+__all__ = ["app", "create_app"]
+
+

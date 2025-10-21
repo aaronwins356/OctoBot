@@ -1,6 +1,6 @@
 @echo off
 REM === Update GitHub repo from local folder ===
-cd /d "C:\Users\moe\Documents\Self Coding Bot"
+cd /d "C:\Users\moe\Documents\OctoBot"
 
 echo.
 echo ==============================
@@ -11,7 +11,7 @@ REM Check if this folder is a git repo
 if not exist ".git" (
     echo Not a git repository. Initializing...
     git init
-    git remote add origin https://github.com/aaronwins356/Self-Coding-Bot.git
+    git remote add origin https://github.com/aaronwins356/OctoBot.git
 )
 
 echo Adding changes...
