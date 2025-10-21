@@ -1,24 +1,45 @@
 # Architecture Overview
 
-AI Republic models governance using a three-branch metaphor:
+Grounded Lifestyle is organised as a civic metaphor:
 
-- **Laws** define immutable constraints. The constitution, validator, and audit utilities live here.
-- **Government** orchestrates discovery, execution, auditing, and economic accounting for agents.
-- **Entrepreneurs** implement BaseAgent subclasses that operate inside sandboxes and produce outputs or proposals.
+- **Laws** define non-negotiable rules such as `laws/constitution.yaml` and `laws/economy_rules.yaml`.
+- **Government** orchestrates ideation, storage, and presentation via the orchestrator, proposal manager, and presenter.
+- **Entrepreneurs** create venture blueprints with specialised agents (venture, optimizer, marketer, writer).
+- **Website** hosts the public portfolio for https://groundedlifestyle.org.
+- **Interface** offers human tooling (CLI + dashboard) to approve and publish work.
+- **Memory** stores analytics hints and run histories for iterative learning.
 
-The execution flow:
+## Flow of a Venture
+1. The venture agent gathers metrics from `memory/analytics.py` and proposes an idea.
+2. `government/proposal_manager.py` serialises the proposal into `scriptSuggestions/<proposal>/proposal.yaml`.
+3. Humans review the artefacts using `python -m interface.cli show <id>` or the Flask dashboard.
+4. Upon approval, `government/presenter.py` renders updated HTML for the public site.
+5. Deployment is manual via `website/deploy.py` to maintain explicit human oversight.
 
-1. The orchestrator loads configuration and the constitution.
-2. Agents are discovered in `entrepreneurs/` and statically validated before import.
-3. In live mode, each agent is executed through a subprocess worker with an isolated sandbox directory.
-4. Outputs and reports feed into memory storage, ledger accounting, and the audit log.
-5. If an agent proposes code, the government packages the proposal, runs static checks, and drafts a PR (offline by default).
-6. Human reviewers use the CLI to inspect, test, and manually merge proposals.
+## Safety Features
+- All proposals require `require_human_approval: true`.
+- `laws/economy_rules.yaml` restricts budgets, domains, and automation scope.
+- Agents operate in sandbox directories defined by `config/settings.yaml`.
+- The CLI exposes only supervised commands: generate venture, list/show/approve proposals, publish site.
 
-Supporting systems:
+## Directory Highlights
+```
+Self-Coding-Bot/
+├── government/
+│   ├── presenter.py        # Builds static portfolio pages
+│   └── proposal_manager.py # Loads & persists proposal manifests
+├── entrepreneurs/
+│   ├── venture_agent.py    # Produces new venture ideas
+│   ├── optimizer_agent.py  # Technical recommendations
+│   └── marketer_agent.py   # SEO & outreach playbooks
+├── website/
+│   ├── app.py              # Flask app for public portfolio
+│   └── templates/          # base.html, home.html, venture_page.html
+├── scriptSuggestions/      # Proposal folders awaiting review
+├── interface/
+│   ├── cli.py              # `brain` supervision commands
+│   └── dashboard.py        # Local Flask review UI
+└── docs/                   # Guides for operators
+```
 
-- **Memory** persists run data and allows summarisation and reflections without external services.
-- **Economy** awards simulated credits tied to audit events, enabling transparent accounting.
-- **Interface** (CLI) ensures human approval for code changes.
-
-This architecture ensures safety by requiring static verification, sandboxed execution, and human gatekeeping for any system modifications.
+This modular structure ensures the motto “Propose, never presume” remains intact: every idea is surfaced with context, aesthetics, and ethical guardrails, while humans retain the final say.
