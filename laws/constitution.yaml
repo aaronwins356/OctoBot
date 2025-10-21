@@ -1,0 +1,25 @@
+version: 1.0.0
+allowed_directories:
+  - entrepreneurs
+  - sandbox/agents
+  - sandbox/proposals
+  - logs
+  - memory/data
+limits:
+  max_runtime_seconds: 30
+  max_memory_mb: 128
+forbidden_imports:
+  - subprocess
+  - importlib
+  - socket
+  - ssl
+  - paramiko
+  - ctypes
+  - multiprocessing
+forbidden_calls:
+  - os.system
+  - subprocess.Popen
+  - subprocess.run
+  - shutil.rmtree
+  - eval
+  - exec
