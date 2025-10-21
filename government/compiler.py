@@ -7,6 +7,8 @@ from typing import Iterable
 
 from government.evaluator import Evaluation
 from government.proposal_manager import Proposal
+from laws.validator import enforce
+from memory.utils import proposals_root
 
 
 class Compiler:
@@ -18,10 +20,10 @@ class Compiler:
             "proposals": [
                 {
                     "id": proposal.proposal_id,
-                    "impact": proposal.impact,
-                    "risk": proposal.risk,
+                    "topic": proposal.topic,
+                    "status": proposal.status,
                     "summary": proposal.summary,
-                    "rationale": proposal.rationale,
+                    "coverage": proposal.coverage,
                 }
                 for proposal in proposals
             ],
@@ -37,8 +39,9 @@ class Compiler:
                 for evaluation in evaluations
             ],
         }
-        target_dir = self.repo_root / "reports"
-        target_dir.mkdir(exist_ok=True)
+        target_dir = proposals_root() / "_workspace"
+        enforce("filesystem_write", str(target_dir))
+        target_dir.mkdir(parents=True, exist_ok=True)
         path = target_dir / "compiled_summary.json"
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
         return path

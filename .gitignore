@@ -1,12 +1,17 @@
 __pycache__/
 *.pyc
 .venv/
+venv/
 .env
 logs/*.log
 logs/reflections/*.txt
 sandbox/agents/*
 sandbox/proposals/*
 memory/data/*.db
+memory/memory.db
+memory/audit.log
+memory/system.log
+proposals/_workspace/
 .idea/
 .vscode/
 .DS_Store
