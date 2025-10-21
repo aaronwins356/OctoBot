@@ -1,4 +1,3 @@
-"""Pytest configuration adding repository root to sys.path."""
 from __future__ import annotations
 
 import sys
