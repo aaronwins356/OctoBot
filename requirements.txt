@@ -1,1 +1,8 @@
+fastapi
+uvicorn
+jinja2
+structlog
+httpx
+pytest
+pytest-cov
 -e .

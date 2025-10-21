@@ -43,7 +43,7 @@ line_length = 100
 known_first_party = ["octobot"]
 
 [tool.pytest.ini_options]
-addopts = "--cov=octobot --cov-report=term-missing"
+addopts = ""
 testpaths = ["tests"]
 
 [tool.coverage.run]

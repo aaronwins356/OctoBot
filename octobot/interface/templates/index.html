@@ -1,0 +1,8 @@
+<html><body>
+<h1>OctoBot Proposals</h1>
+<ul>
+{% for p in proposals %}
+<li><a href="/proposal/{{p.id}}">{{p.title}}</a> — {{p.state}}</li>
+{% endfor %}
+</ul>
+</body></html>

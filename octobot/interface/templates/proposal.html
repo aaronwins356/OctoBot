@@ -1,0 +1,11 @@
+<html><body>
+<h1>{{ proposal.title }}</h1>
+<p>Status: {{ proposal.state }}</p>
+<p>Coverage: {{ proposal.metadata.coverage or "N/A" }}</p>
+<form method="post" action="/approve/{{proposal.id}}">
+    <button type="submit">Approve</button>
+</form>
+<form method="post" action="/reject/{{proposal.id}}">
+    <button type="submit">Reject</button>
+</form>
+</body></html>
